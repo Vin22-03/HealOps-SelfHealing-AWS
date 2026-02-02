@@ -1,0 +1,76 @@
+pipeline {
+  agent any
+
+  environment {
+    AWS_DEFAULT_REGION = "us-east-1"
+    TF_WORKING_DIR     = "infra/terraform"
+  }
+
+  options {
+    timestamps()
+    disableConcurrentBuilds()
+  }
+
+  stages {
+
+    stage('Checkout Source Code') {
+      steps {
+        checkout([
+          $class: 'GitSCM',
+          branches: [[name: '*/main']],
+          userRemoteConfigs: [[
+            url: 'https://github.com/Vin22-03/HealOps-SelfHealing-AWS.git',
+            credentialsId: 'githubcreds'
+          ]]
+        ])
+      }
+    }
+
+    stage('Terraform Init') {
+      steps {
+        withCredentials([
+          [$class: 'AmazonWebServicesCredentialsBinding',
+           credentialsId: 'aws-healops']
+        ]) {
+          sh """
+            cd ${TF_WORKING_DIR}
+            terraform init
+          """
+        }
+      }
+    }
+
+    stage('Terraform Validate') {
+      steps {
+        sh """
+          cd ${TF_WORKING_DIR}
+          terraform validate
+        """
+      }
+    }
+
+    stage('Terraform Plan') {
+      steps {
+        withCredentials([
+          [$class: 'AmazonWebServicesCredentialsBinding',
+           credentialsId: 'aws-healops']
+        ]) {
+          sh """
+            cd ${TF_WORKING_DIR}
+            terraform plan
+          """
+        }
+      }
+    }
+  }
+
+  post {
+    success {
+      echo "✅ Terraform init & plan completed successfully for HealOps"
+    }
+
+    failure {
+      echo "❌ Pipeline failed. Check logs carefully."
+    }
+  }
+}
