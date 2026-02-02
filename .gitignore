@@ -1,0 +1,18 @@
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfplan
+
+# Terraform lock (optional to keep, but safe to ignore)
+.terraform.lock.hcl
+
+# AWS
+.aws/
+
+# Jenkins
+*.log
+
+# OS
+.DS_Store
