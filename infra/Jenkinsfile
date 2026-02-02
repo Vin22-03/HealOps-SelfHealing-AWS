@@ -33,16 +33,17 @@ pipeline {
         ]) {
           sh """
             cd ${TF_WORKING_DIR}
-            terraform init
+            terraform init -input=false
           """
         }
       }
     }
 
-    stage('Terraform Validate') {
+    stage('Terraform Format & Validate') {
       steps {
         sh """
           cd ${TF_WORKING_DIR}
+          terraform fmt -check
           terraform validate
         """
       }
@@ -56,7 +57,7 @@ pipeline {
         ]) {
           sh """
             cd ${TF_WORKING_DIR}
-            terraform plan
+            terraform plan -out=tfplan -input=false
           """
         }
       }
@@ -65,11 +66,12 @@ pipeline {
 
   post {
     success {
-      echo "✅ Terraform init & plan completed successfully for HealOps"
+      archiveArtifacts artifacts: 'infra/terraform/tfplan', fingerprint: true
+      echo "✅ Terraform plan generated & archived successfully for HealOps"
     }
 
     failure {
-      echo "❌ Pipeline failed. Check logs carefully."
+      echo "❌ HealOps pipeline failed. Check logs carefully."
     }
   }
 }
