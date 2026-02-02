@@ -1,14 +1,22 @@
+############################################
+# Application Load Balancer
+############################################
 resource "aws_lb" "healops_alb" {
   name               = "healops-alb"
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb_sg.id]
-  subnets            = data.aws_subnets.default.ids
+
+  # IMPORTANT: Use public multi-AZ subnets
+  subnets = data.aws_subnets.public.ids
 
   tags = {
     Name = "healops-alb"
   }
 }
 
+############################################
+# Target Group for ECS Tasks
+############################################
 resource "aws_lb_target_group" "healops_tg" {
   name        = "healops-tg"
   port        = 8080
@@ -30,7 +38,9 @@ resource "aws_lb_target_group" "healops_tg" {
   }
 }
 
-
+############################################
+# ALB Listener (HTTP → Target Group)
+############################################
 resource "aws_lb_listener" "healops_listener" {
   load_balancer_arn = aws_lb.healops_alb.arn
   port              = 80
