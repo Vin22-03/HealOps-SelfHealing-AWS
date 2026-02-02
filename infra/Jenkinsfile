@@ -62,16 +62,37 @@ pipeline {
         }
       }
     }
+
+    stage('Manual Approval') {
+      steps {
+        input message: '🚨 Apply Terraform plan for HealOps? This will create AWS resources.',
+              ok: 'Apply'
+      }
+    }
+
+    stage('Terraform Apply') {
+      steps {
+        withCredentials([
+          [$class: 'AmazonWebServicesCredentialsBinding',
+           credentialsId: 'aws-healops']
+        ]) {
+          sh """
+            cd ${TF_WORKING_DIR}
+            terraform apply -input=false tfplan
+          """
+        }
+      }
+    }
   }
 
   post {
     success {
       archiveArtifacts artifacts: 'infra/terraform/tfplan', fingerprint: true
-      echo "✅ Terraform plan generated & archived successfully for HealOps"
+      echo "✅ HealOps infrastructure applied successfully via approved plan"
     }
 
     failure {
-      echo "❌ HealOps pipeline failed. Check logs carefully."
+      echo "❌ HealOps pipeline failed. No partial apply occurred."
     }
   }
 }
