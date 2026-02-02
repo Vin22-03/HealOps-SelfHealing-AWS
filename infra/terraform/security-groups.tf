@@ -1,7 +1,10 @@
+############################################
+# ALB Security Group
+############################################
 resource "aws_security_group" "alb_sg" {
   name        = "healops-alb-sg"
   description = "Security group for HealOps Application Load Balancer"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = aws_vpc.healops_vpc.id
 
   ingress {
     description = "Allow HTTP from internet"
@@ -24,10 +27,13 @@ resource "aws_security_group" "alb_sg" {
   }
 }
 
+############################################
+# ECS Service Security Group
+############################################
 resource "aws_security_group" "ecs_sg" {
   name        = "healops-ecs-sg"
   description = "Security group for HealOps ECS service"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = aws_vpc.healops_vpc.id
 
   ingress {
     description     = "Allow traffic from ALB only"
