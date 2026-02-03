@@ -1,0 +1,39 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>HealOps — Incidents</title>
+  <link rel="stylesheet" href="/static/css/style.css" />
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <div>
+        <h1>Incidents</h1>
+        <p class="sub">All incidents (open + resolved)</p>
+      </div>
+      <nav>
+        <a class="navlink" href="/">Dashboard</a>
+        <a class="navlink active" href="/incidents">Incidents</a>
+      </nav>
+    </header>
+
+    <section class="card">
+      <pre id="all" class="pre">Loading…</pre>
+    </section>
+  </div>
+
+  <script>
+    fetch("/api/incidents")
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById("all").textContent =
+          JSON.stringify(data.incidents, null, 2);
+      })
+      .catch(e => {
+        document.getElementById("all").textContent = "Error: " + e;
+      });
+  </script>
+</body>
+</html>

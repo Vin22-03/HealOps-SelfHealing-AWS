@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>{{ title or "HealOps" }}</title>
+
+  <!-- Tailwind CDN (no build tools) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body class="bg-zinc-950 text-zinc-100">
+  <div class="min-h-screen">
+    <header class="border-b border-zinc-800 bg-zinc-950/60 backdrop-blur">
+      <div class="mx-auto max-w-6xl px-4 py-4 flex items-center justify-between">
+        <div>
+          <div class="flex items-center gap-2">
+            <div class="h-9 w-9 rounded-xl bg-zinc-800 flex items-center justify-center font-bold">H</div>
+            <div>
+              <div class="text-xl font-semibold leading-tight">HealOps</div>
+              <div class="text-xs text-zinc-400 -mt-0.5">Self-healing AWS workloads — observability + MTTR</div>
+            </div>
+          </div>
+        </div>
+
+        <nav class="flex items-center gap-3 text-sm">
+          <a class="px-3 py-2 rounded-lg hover:bg-zinc-900" href="/">Dashboard</a>
+          <a class="px-3 py-2 rounded-lg hover:bg-zinc-900" href="/incidents">Incidents</a>
+          <a class="px-3 py-2 rounded-lg hover:bg-zinc-900" href="/api/ecs/status" target="_blank">ECS Status API</a>
+          <a class="px-3 py-2 rounded-lg hover:bg-zinc-900" href="/health" target="_blank">Health</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-6xl px-4 py-6">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="border-t border-zinc-800 text-zinc-500">
+      <div class="mx-auto max-w-6xl px-4 py-6 text-xs flex flex-wrap gap-2 items-center justify-between">
+        <div>© HealOps — demo mode now, real AWS signals next</div>
+        <div class="text-zinc-600">Tip: Keep it honest. Show simulation + then switch to EventBridge/ECS.</div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Lightweight auto-refresh (no React) -->
+  <script>
+    async function refreshLive() {
+      try {
+        const res = await fetch("/api/incidents/");
+        const data = await res.json();
+
+        const el = document.getElementById("live-json");
+        if (el) el.textContent = JSON.stringify(data, null, 2);
+
+        const mttrEl = document.getElementById("mttr");
+        if (mttrEl) mttrEl.textContent = data.mttr_seconds_avg ?? "—";
+
+        const stateEl = document.getElementById("sim-state");
+        if (stateEl) stateEl.textContent = data.simulation.health_fail ? "DEGRADED" : "HEALTHY";
+
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    setInterval(refreshLive, 2000);
+    refreshLive();
+  </script>
+</body>
+</html>

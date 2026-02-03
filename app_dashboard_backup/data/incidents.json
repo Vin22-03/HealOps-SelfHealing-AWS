@@ -1,0 +1,35 @@
+[
+  {
+    "id": "INC-0003",
+    "title": "ECS task crash loop (OOM)",
+    "severity": "P1",
+    "status": "resolved",
+    "failure_time": "2026-02-03T07:10:10Z",
+    "recovery_time": "2026-02-03T07:12:41Z",
+    "mttr_seconds": 151,
+    "detection": "ALB health check failed",
+    "healing_action": "ECS replaced unhealthy task"
+  },
+  {
+    "id": "INC-0002",
+    "title": "High latency spike (p95 > 1200ms)",
+    "severity": "P2",
+    "status": "resolved",
+    "failure_time": "2026-02-03T06:40:00Z",
+    "recovery_time": "2026-02-03T06:44:10Z",
+    "mttr_seconds": 250,
+    "detection": "Target response time exceeded threshold",
+    "healing_action": "Auto scale-out triggered"
+  },
+  {
+    "id": "INC-0001",
+    "title": "Container image pull failed",
+    "severity": "P1",
+    "status": "open",
+    "failure_time": "2026-02-03T06:10:20Z",
+    "recovery_time": null,
+    "mttr_seconds": null,
+    "detection": "Task stopped event",
+    "healing_action": "Pending: retry + fallback"
+  }
+]
