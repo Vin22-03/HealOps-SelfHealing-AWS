@@ -1,80 +1,101 @@
-import os
 import json
-import uuid
+import boto3
+import os
 from datetime import datetime, timezone
 
-import boto3
-
 dynamodb = boto3.resource("dynamodb")
-TABLE_NAME = os.environ["INCIDENTS_TABLE"]
-table = dynamodb.Table(TABLE_NAME)
-
-
-def iso_now():
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+table = dynamodb.Table(os.environ["INCIDENTS_TABLE"])
 
 
 def lambda_handler(event, context):
-    # Log the raw event (super useful for debugging first runs)
     print("RAW_EVENT:", json.dumps(event))
 
     detail = event.get("detail", {})
     last_status = detail.get("lastStatus")
-
-    # We only care about STOPPED (rule should already filter, this is a safety net)
-    if last_status != "STOPPED":
-        return {"ignored": True, "reason": f"lastStatus={last_status}"}
-
     cluster_arn = detail.get("clusterArn", "")
-    group = detail.get("group", "")  # often like: service:healops-service
-    task_arn = detail.get("taskArn", "")
-    stopped_reason = detail.get("stoppedReason", "")
-    desired_status = detail.get("desiredStatus", "")
+    service_arn = detail.get("group", "")
 
-    # Best-effort exit code (may not exist sometimes)
-    exit_code = None
-    containers = detail.get("containers", [])
-    if containers and isinstance(containers, list):
-        exit_code = containers[0].get("exitCode")
+    if not service_arn.startswith("service:"):
+        return {"message": "Not a service task, ignoring"}
 
-    detection_time = event.get("time") or iso_now()
+    service_name = service_arn.replace("service:", "")
+    cluster_name = cluster_arn.split("/")[-1]
+    now = datetime.now(timezone.utc).isoformat()
 
-    # Service name extraction (best effort)
-    service_name = "unknown"
-    if group.startswith("service:"):
-        service_name = group.split("service:", 1)[1]
+    # -------------------------------
+    # FAILURE: TASK STOPPED
+    # -------------------------------
+    if last_status == "STOPPED":
+        item = {
+            "service": service_name,
+            "detection_time": now,
+            "cluster": cluster_name,
+            "component": "ECS",
+            "desired_status": "STOPPED",
+            "detected_by": "EventBridge",
+            "failure_type": "TASK_STOPPED",
+            "exit_code": detail.get("containers", [{}])[0].get("exitCode"),
+            "status": "OPEN",
+            "healed_time": None,
+            "mttr_seconds": None,
+            "healing_action": "ECS Scheduler"
+        }
 
-    incident_id = f"INC-{datetime.now(timezone.utc).strftime('%Y%m%d')}-{str(uuid.uuid4())[:8]}"
+        table.put_item(Item=item)
+        print("Incident CREATED:", item)
 
-    item = {
-        "service": service_name,
-        "detection_time": detection_time,
+        return {"message": "STOPPED incident recorded"}
 
-        "incident_id": incident_id,
-        "cluster": cluster_arn.split("/")[-1] if "/" in cluster_arn else cluster_arn,
-        "region": os.environ.get("AWS_REGION", "us-east-1"),
+    # -------------------------------
+    # RECOVERY: TASK RUNNING
+    # -------------------------------
+    if last_status == "RUNNING":
+        response = table.query(
+            KeyConditionExpression="service = :svc",
+            ExpressionAttributeValues={
+                ":svc": service_name
+            },
+            ScanIndexForward=False,  # latest first
+            Limit=1
+        )
 
-        "component": "ECS",
-        "failure_type": "TASK_STOPPED",
-        "severity": "P2",
+        if not response["Items"]:
+            print("No incident found to resolve")
+            return {"message": "No incident to resolve"}
 
-        "task_arn": task_arn,
-        "desired_status": desired_status,
-        "exit_code": exit_code,
-        "stop_reason": stopped_reason,
+        incident = response["Items"][0]
 
-        "detected_by": "EventBridge",
-        "raw_event_id": event.get("id", ""),
+        if incident.get("status") != "OPEN":
+            print("Latest incident already resolved")
+            return {"message": "Incident already resolved"}
 
-        # Healing fields will be filled in next iteration once we track recovery
-        "healing_action": "ECS_SCHEDULER_RESTART",
-        "healed_time": None,
-        "mttr_seconds": None,
+        detection_time = datetime.fromisoformat(incident["detection_time"])
+        healed_time = datetime.now(timezone.utc)
+        mttr = int((healed_time - detection_time).total_seconds())
 
-        "status": "OPEN",
-        "learning": "Captured STOPPED event; recovery tracking pending."
-    }
+        table.update_item(
+            Key={
+                "service": incident["service"],
+                "detection_time": incident["detection_time"]
+            },
+            UpdateExpression="""
+                SET
+                    healed_time = :healed,
+                    mttr_seconds = :mttr,
+                    #s = :status
+            """,
+            ExpressionAttributeNames={
+                "#s": "status"
+            },
+            ExpressionAttributeValues={
+                ":healed": healed_time.isoformat(),
+                ":mttr": mttr,
+                ":status": "RESOLVED"
+            }
+        )
 
-    table.put_item(Item=item)
+        print("Incident RESOLVED:", incident["service"], mttr, "seconds")
 
-    return {"stored": True, "incident_id": incident_id, "service": service_name}
+        return {"message": "Incident resolved"}
+
+    return {"message": "Event ignored"}
