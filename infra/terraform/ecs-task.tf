@@ -1,4 +1,8 @@
 resource "aws_ecs_task_definition" "healops_task" {
+  depends_on = [
+    aws_cloudwatch_log_group.healops_logs
+  ]
+
   family                   = "healops-probe-task"
   network_mode             = "awsvpc"
   requires_compatibilities = ["FARGATE"]
