@@ -21,7 +21,7 @@ resource "aws_lb" "healops_alb" {
 ############################################
 resource "aws_lb_target_group" "healops_tg" {
   name        = "healops-tg"
-  port        = 3000              # ✅ MUST match container port
+  port        = 3000 # ✅ MUST match container port
   protocol    = "HTTP"
   vpc_id      = aws_vpc.healops_vpc.id
   target_type = "ip"
