@@ -20,7 +20,7 @@ resource "aws_lb" "healops_alb" {
 # Target Group (FIXED + SAFE REPLACEMENT)
 ############################################
 resource "aws_lb_target_group" "healops_tg" {
-  name        = "healops-tg"
+  name_prefix        = "healops-tgg"
   port        = 3000 # ✅ MUST match container port
   protocol    = "HTTP"
   vpc_id      = aws_vpc.healops_vpc.id
