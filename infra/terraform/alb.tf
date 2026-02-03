@@ -44,4 +44,4 @@ resource "aws_lb_listener" "healops_listener" {
     target_group_arn = aws_lb_target_group.healops_tg.arn
   }
 }
- 	
+
