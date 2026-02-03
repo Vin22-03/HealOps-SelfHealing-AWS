@@ -11,7 +11,7 @@ resource "aws_ecs_task_definition" "healops_task" {
   container_definitions = jsonencode([
     {
       name      = "healops-probe"
-      image     = "${aws_ecr_repository.healops.repository_url}:latest"
+      image     = "${aws_ecr_repository.healops_app.repository_url}:latest"
       essential = true
 
       portMappings = [
