@@ -44,3 +44,57 @@ resource "aws_iam_role" "ecs_task_role" {
     ]
   })
 }
+############################################
+# IAM Role for HealOps Incident Lambda
+############################################
+resource "aws_iam_role" "healops_lambda_role" {
+  name = "healops-incident-lambda-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [{
+      Effect = "Allow",
+      Principal = {
+        Service = "lambda.amazonaws.com"
+      },
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+############################################
+# IAM Policy: Lambda logging + DynamoDB write
+############################################
+resource "aws_iam_policy" "healops_lambda_policy" {
+  name = "healops-incident-lambda-policy"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents"
+        ],
+        Resource = "*"
+      },
+      {
+        Effect = "Allow",
+        Action = [
+          "dynamodb:PutItem"
+        ],
+        Resource = aws_dynamodb_table.healops_incidents.arn
+      }
+    ]
+  })
+}
+
+############################################
+# Attach policy to role
+############################################
+resource "aws_iam_role_policy_attachment" "healops_lambda_attach" {
+  role       = aws_iam_role.healops_lambda_role.name
+  policy_arn = aws_iam_policy.healops_lambda_policy.arn
+}

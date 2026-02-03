@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>{% block title %}HealOps{% endblock %}</title>
+  <link rel="stylesheet" href="/static/css/glass.css">
+  <script defer src="/static/js/ui.js"></script>
+</head>
+
+<body>
+  <div class="bg">
+    <div class="bg-orb orb-1"></div>
+    <div class="bg-orb orb-2"></div>
+    <div class="bg-orb orb-3"></div>
+    <div class="grid-overlay"></div>
+  </div>
+
+  <div class="app-shell">
+    <header class="topbar glass">
+      <div class="brand">
+        <span class="bolt">⚡</span>
+        <span class="brand-name">HealOps</span>
+        <span class="pill">SRE Dashboard</span>
+      </div>
+
+      <nav class="nav">
+        <a class="nav-link" href="/dashboard" data-route="dashboard">Dashboard</a>
+        <a class="nav-link" href="/incidents" data-route="incidents">Incidents</a>
+        <a class="nav-link" href="/about" data-route="about">About</a>
+      </nav>
+    </header>
+
+    <main class="content">
+      {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+      <div class="footer-inner glass">
+        <span>Built by VinCloudOps • HealOps — Self-Healing Cloud Systems</span>
+        <span class="dot">•</span>
+        <span>AWS ECS (Fargate) • ALB • Terraform • Jenkins</span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

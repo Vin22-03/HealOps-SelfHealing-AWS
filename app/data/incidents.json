@@ -1,0 +1,19 @@
+[
+  {
+    "id": "INC-001",
+    "title": "ECS task exited during runtime",
+    "severity": "P2",
+    "status": "RESOLVED",
+    "component": "ECS Service",
+    "failure": "Task exited",
+    "failure_time": "2026-02-03T14:01:00Z",
+    "recovery_time": "2026-02-03T14:01:32Z",
+    "detection": "CloudWatch",
+    "healing_action": "Restart Task",
+    "what_broke": "A running ECS task stopped unexpectedly (simulated container failure).",
+    "impact": "Service briefly had zero healthy targets, leading to short unavailability.",
+    "detection_detail": "CloudWatch alarm (or service health signal) detected task count/health degradation.",
+    "healing_detail": "ECS Service Scheduler launched a replacement task automatically; ALB health checks returned healthy.",
+    "learning": "Resilience comes from health checks + desired state reconciliation. MTTR is measurable even in small failures."
+  }
+]

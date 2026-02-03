@@ -1,0 +1,46 @@
+{% extends "layout.html" %}
+{% block title %}HealOps | Incidents{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1 class="h1">Incident History</h1>
+  <p class="subtitle">
+    Each incident documents: <b>what broke</b>, <b>how it was detected</b>, <b>what healed it</b>, and <b>what we learned</b>.
+    That’s how reliability work is communicated in real teams.
+  </p>
+</section>
+
+<section class="section">
+  <div class="glass table-wrap">
+    <table class="table" id="incTable">
+      <thead>
+        <tr>
+          <th>Time (UTC)</th>
+          <th>Component</th>
+          <th>Failure</th>
+          <th>Detected By</th>
+          <th>Healing Action</th>
+          <th>MTTR</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- JS builds rows + expandable details -->
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="glass callout">
+    <h3 class="h3">How to read this page</h3>
+    <p class="muted">
+      Click any incident row to expand details. This is designed like a lightweight post-incident review:
+      impact → detection → mitigation → learnings.
+    </p>
+  </div>
+</section>
+
+<script>
+  window.HEALOPS_PAGE = "incidents";
+</script>
+{% endblock %}

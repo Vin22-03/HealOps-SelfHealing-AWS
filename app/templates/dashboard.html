@@ -1,0 +1,62 @@
+{% extends "layout.html" %}
+{% block title %}HealOps | Dashboard{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1 class="h1">Self-Healing Dashboard</h1>
+  <p class="subtitle">
+    Failure-first, recovery-focused. This dashboard visualizes incident timelines, detection signals, healing actions, and MTTR.
+    <span class="muted">Demo data now — live AWS signals later.</span>
+  </p>
+</section>
+
+<section class="cards" id="dashCards">
+  <!-- filled by JS -->
+</section>
+
+<section class="section">
+  <div class="section-head">
+    <h2 class="h2">Recent Healing Timeline</h2>
+    <p class="muted">What broke → how it was detected → what healed it → MTTR.</p>
+  </div>
+
+  <div class="glass table-wrap">
+    <table class="table" id="latestTable">
+      <thead>
+        <tr>
+          <th>Incident</th>
+          <th>Severity</th>
+          <th>Status</th>
+          <th>Detected By</th>
+          <th>Healing Action</th>
+          <th>MTTR</th>
+        </tr>
+      </thead>
+      <tbody>
+        <!-- filled by JS -->
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<section class="section">
+  <div class="glass callout">
+    <h3 class="h3">Why HealOps exists</h3>
+    <p>
+      Most portfolios show “everything works.” Real SRE work starts when it doesn’t.
+      HealOps is designed to make failures visible, show the recovery mechanism, and quantify MTTR — without unsafe chaos buttons.
+    </p>
+    <div class="chips">
+      <span class="chip">Incident lifecycle thinking</span>
+      <span class="chip">ALB health checks</span>
+      <span class="chip">ECS task replacement</span>
+      <span class="chip">MTTR measurement</span>
+      <span class="chip">Audit-friendly demo</span>
+    </div>
+  </div>
+</section>
+
+<script>
+  window.HEALOPS_PAGE = "dashboard";
+</script>
+{% endblock %}

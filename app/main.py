@@ -1,16 +1,14 @@
 from fastapi import FastAPI
-import time
+from fastapi.staticfiles import StaticFiles
 
-app = FastAPI(title="HealOps Probe")
+from app.routers import pages, api, health
 
-@app.get("/health")
-def health():
-    return {
-        "status": "healthy",
-        "service": "healops-probe",
-        "timestamp": int(time.time())
-    }
+app = FastAPI(title="HealOps", version="1.0.0")
 
-@app.get("/")
-def root():
-    return {"message": "HealOps probe running"}
+# Static files
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+# Routers
+app.include_router(pages.router)
+app.include_router(api.router)
+app.include_router(health.router)
