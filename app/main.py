@@ -1,12 +1,12 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import pages, api, health
+from routers import pages, api, health
 
 app = FastAPI(title="HealOps", version="1.0.0")
 
 # Static files
-app.mount("/static", StaticFiles(directory="app/static"), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Routers
 app.include_router(pages.router)
