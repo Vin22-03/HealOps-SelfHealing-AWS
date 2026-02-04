@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from routers import pages, api, health
+from routers import pages, api, health, load
 
 app = FastAPI(title="HealOps", version="1.0.0")
 
