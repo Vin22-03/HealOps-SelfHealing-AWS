@@ -6,11 +6,17 @@ from datetime import datetime
 router = APIRouter(prefix="/api")
 
 # -----------------------------
-# DynamoDB
+# DynamoDB (LAZY INIT – FIXES NoRegionError)
 # -----------------------------
 DYNAMODB_TABLE = os.environ.get("INCIDENTS_TABLE", "healops-incidents")
-dynamodb = boto3.resource("dynamodb")
-table = dynamodb.Table(DYNAMODB_TABLE)
+
+def get_dynamodb_table():
+    region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
+    if not region:
+        raise RuntimeError("AWS region not set")
+
+    dynamodb = boto3.resource("dynamodb", region_name=region)
+    return dynamodb.Table(DYNAMODB_TABLE)
 
 
 # -----------------------------

@@ -1,7 +1,7 @@
 resource "aws_ecs_service" "healops_service" {
   name            = "healops-service"
   cluster         = aws_ecs_cluster.healops_cluster.id
-  task_definition = aws_ecs_task_definition.healops_task.arn
+  task_definition = aws_ecs_task_definition.healops.arn
   desired_count   = 1
   launch_type     = "FARGATE"
 
