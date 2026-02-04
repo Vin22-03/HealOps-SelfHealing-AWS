@@ -1,73 +1,90 @@
-import json
-from pathlib import Path
-from datetime import datetime, timezone
 from fastapi import APIRouter
+import boto3
+import os
+from datetime import datetime
 
-router = APIRouter(prefix="/api", tags=["api"])
+router = APIRouter(prefix="/api")
 
-DATA_PATH = Path("app/data/incidents.json")
+# -----------------------------
+# DynamoDB setup
+# -----------------------------
+DYNAMODB_TABLE = os.environ.get("INCIDENTS_TABLE", "healops-incidents")
+dynamodb = boto3.resource("dynamodb")
+table = dynamodb.Table(DYNAMODB_TABLE)
 
-def _parse_iso(ts: str) -> datetime:
-    # Expect ISO like "2026-02-03T14:01:00Z"
-    if ts.endswith("Z"):
-        ts = ts.replace("Z", "+00:00")
-    return datetime.fromisoformat(ts)
 
-def _fmt_seconds(secs: int) -> str:
-    if secs < 60:
-        return f"{secs}s"
-    m, s = divmod(secs, 60)
-    if m < 60:
-        return f"{m}m {s}s"
-    h, rem = divmod(m, 60)
-    return f"{h}h {rem}m"
+# -----------------------------
+# Helpers
+# -----------------------------
+def humanize_seconds(seconds: int) -> str:
+    if seconds is None:
+        return "-"
+    minutes = seconds // 60
+    sec = seconds % 60
+    return f"{minutes}m {sec}s"
 
-def load_incidents():
-    if not DATA_PATH.exists():
-        return []
 
-    raw = json.loads(DATA_PATH.read_text(encoding="utf-8"))
-    incidents = []
-    for inc in raw:
-        failure = _parse_iso(inc["failure_time"])
-        recovery = _parse_iso(inc["recovery_time"]) if inc.get("recovery_time") else None
+def fetch_all_incidents():
+    """
+    Scan is acceptable here because:
+    - Demo / single service
+    - Small dataset
+    - Simple & predictable
+    """
+    response = table.scan()
+    items = response.get("Items", [])
 
-        mttr_seconds = None
-        if recovery:
-            mttr_seconds = int((recovery - failure).total_seconds())
+    # Sort newest first
+    items.sort(
+        key=lambda x: x.get("detection_time", ""),
+        reverse=True
+    )
 
-        inc["mttr_seconds"] = mttr_seconds
-        inc["mttr_human"] = _fmt_seconds(mttr_seconds) if mttr_seconds is not None else "—"
-        inc["failure_hm"] = failure.astimezone(timezone.utc).strftime("%H:%M UTC")
-        inc["recovery_hm"] = recovery.astimezone(timezone.utc).strftime("%H:%M UTC") if recovery else "—"
-        incidents.append(inc)
+    return items
 
-    # latest first
-    incidents.sort(key=lambda x: x["failure_time"], reverse=True)
-    return incidents
 
-@router.get("/incidents")
-def get_incidents():
-    return {"items": load_incidents()}
-
+# -----------------------------
+# Dashboard API
+# -----------------------------
 @router.get("/dashboard")
-def get_dashboard():
-    items = load_incidents()
-    total = len(items)
-    open_count = sum(1 for i in items if i.get("status") == "OPEN")
-    resolved_count = sum(1 for i in items if i.get("status") == "RESOLVED")
+def dashboard():
+    incidents = fetch_all_incidents()
 
-    mttrs = [i["mttr_seconds"] for i in items if i.get("mttr_seconds") is not None]
-    avg_mttr = int(sum(mttrs) / len(mttrs)) if mttrs else None
+    total = len(incidents)
+    resolved = [i for i in incidents if i.get("status") == "RESOLVED"]
+    open_incidents = [i for i in incidents if i.get("status") == "OPEN"]
 
-    latest = items[:6]
+    mttr_values = [
+        i.get("mttr_seconds") for i in resolved
+        if i.get("mttr_seconds") is not None
+    ]
+
+    avg_mttr = int(sum(mttr_values) / len(mttr_values)) if mttr_values else None
+
+    latest = incidents[0] if incidents else None
 
     return {
         "summary": {
             "total_incidents": total,
-            "open": open_count,
-            "resolved": resolved_count,
+            "open_incidents": len(open_incidents),
+            "resolved_incidents": len(resolved),
             "avg_mttr_seconds": avg_mttr,
+            "avg_mttr_human": humanize_seconds(avg_mttr)
         },
         "latest": latest
+    }
+
+
+# -----------------------------
+# Incidents API
+# -----------------------------
+@router.get("/incidents")
+def incidents():
+    items = fetch_all_incidents()
+
+    for i in items:
+        i["mttr_human"] = humanize_seconds(i.get("mttr_seconds"))
+
+    return {
+        "items": items
     }
