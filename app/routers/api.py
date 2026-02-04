@@ -5,17 +5,48 @@ from datetime import datetime
 
 router = APIRouter(prefix="/api")
 
+# -----------------------------
+# DynamoDB
+# -----------------------------
 DYNAMODB_TABLE = os.environ.get("INCIDENTS_TABLE", "healops-incidents")
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(DYNAMODB_TABLE)
 
 
-def humanize_seconds(seconds):
+# -----------------------------
+# Helpers
+# -----------------------------
+def humanize_seconds(seconds: int | None):
     if seconds is None:
-        return "-"
-    minutes = seconds // 60
-    sec = seconds % 60
-    return f"{minutes}m {sec}s"
+        return "—"
+    seconds = int(seconds)
+    if seconds < 60:
+        return f"{seconds}s"
+    m = seconds // 60
+    s = seconds % 60
+    return f"{m}m {s}s"
+
+
+def format_incident(item: dict):
+    """
+    Normalize DynamoDB item → UI-ready incident schema
+    """
+    return {
+        "failure_time": item.get("detection_time"),
+        "component": item.get("component", "ECS"),
+        "failure": item.get("failure_type") or item.get("incident_type"),
+        "failure_type": item.get("failure_type"),
+        "detection": item.get("detected_by"),
+        "healing_action": item.get("healing_action"),
+        "mttr_human": humanize_seconds(item.get("mttr_seconds")),
+        "mttr_seconds": item.get("mttr_seconds"),
+        "status": item.get("status", "OPEN"),
+        # details (used in expanded row)
+        "healed_time": item.get("healed_time"),
+        "cluster": item.get("cluster"),
+        "exit_code": item.get("exit_code"),
+        "source_event_id": item.get("source_event_id"),
+    }
 
 
 def fetch_all_incidents():
@@ -27,36 +58,41 @@ def fetch_all_incidents():
         key=lambda x: x.get("detection_time", ""),
         reverse=True
     )
-
     return items
 
 
+# -----------------------------
+# API: Dashboard
+# -----------------------------
 @router.get("/dashboard")
 def dashboard():
-    incidents = fetch_all_incidents()
+    raw_items = fetch_all_incidents()
+    items = [format_incident(i) for i in raw_items]
 
-    resolved = [i for i in incidents if i.get("healing_action")]
-    open_incidents = [i for i in incidents if not i.get("healing_action")]
+    total = len(items)
+    open_items = [i for i in items if i["status"] == "OPEN"]
+    resolved_items = [i for i in items if i["status"] == "RESOLVED"]
+
+    mttrs = [i["mttr_seconds"] for i in items if i["mttr_seconds"] is not None]
+    avg_mttr_seconds = int(sum(mttrs) / len(mttrs)) if mttrs else None
 
     return {
         "summary": {
-            "total_incidents": len(incidents),
-            "open_incidents": len(open_incidents),
-            "resolved_incidents": len(resolved),
-            "avg_mttr_seconds": None,
-            "avg_mttr_human": "-"
+            "total_incidents": total,
+            "open_incidents": len(open_items),
+            "resolved_incidents": len(resolved_items),
+            "avg_mttr_seconds": avg_mttr_seconds,
+            "avg_mttr_human": humanize_seconds(avg_mttr_seconds),
         },
-        "latest": incidents[0] if incidents else None
+        "latest": items[0] if items else None,
     }
 
 
+# -----------------------------
+# API: Incidents
+# -----------------------------
 @router.get("/incidents")
 def incidents():
-    items = fetch_all_incidents()
-
-    for i in items:
-        i["status"] = "RESOLVED" if i.get("healing_action") else "OPEN"
-        i["mttr_human"] = "-"
-        i["time"] = i.get("detection_time", "undefined")
-
+    raw_items = fetch_all_incidents()
+    items = [format_incident(i) for i in raw_items]
     return {"items": items}

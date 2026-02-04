@@ -8,6 +8,11 @@
     Each incident documents: <b>what broke</b>, <b>how it was detected</b>, <b>what healed it</b>, and <b>what we learned</b>.
     That’s how reliability work is communicated in real teams.
   </p>
+
+  <!-- ✅ ADDED: Data source credibility -->
+  <p class="muted" style="margin-top:6px">
+    ● Data Source: AWS DynamoDB (<code>healops-incidents</code>, <code>us-east-1</code>)
+  </p>
 </section>
 
 <section class="section">
@@ -28,6 +33,11 @@
       </tbody>
     </table>
   </div>
+
+  <!-- ✅ ADDED: MTTR explanation -->
+  <p class="muted" style="margin-top:10px">
+    MTTR is shown only after a recovery signal is observed. Scheduler-driven ECS recoveries may not emit a resolvable event.
+  </p>
 </section>
 
 <section class="section">

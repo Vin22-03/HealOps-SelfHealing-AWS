@@ -13,75 +13,76 @@
     });
   }
 
+  /* ---------------- DASHBOARD ---------------- */
+
   async function loadDashboard() {
     const cardsEl = document.getElementById("dashCards");
     const tbody = document.querySelector("#latestTable tbody");
 
     const res = await fetch("/api/dashboard");
     const data = await res.json();
-
     const s = data.summary;
+
     const avg = s.avg_mttr_seconds == null ? "—" : humanize(s.avg_mttr_seconds);
 
     cardsEl.innerHTML = `
       <div class="card glass">
         <h3>System Status</h3>
-        <p class="value">
-          <span class="badge"><span class="dot ok"></span>RUNNING</span>
-        </p>
-        <div class="hint">ALB reachable, ECS desired tasks maintained.</div>
+        <p class="value"><span class="badge"><span class="dot ok"></span>RUNNING</span></p>
+        <div class="hint">ECS service maintaining desired tasks.</div>
       </div>
 
       <div class="card glass">
         <h3>Total Incidents</h3>
         <p class="value">${s.total_incidents}</p>
-        <div class="hint">All observed failures recorded with recovery time and action.</div>
+        <div class="hint">All failures recorded via EventBridge / CloudWatch.</div>
       </div>
 
       <div class="card glass">
         <h3>Average MTTR</h3>
         <p class="value">${avg}</p>
-        <div class="hint">Mean time to recovery across resolved incidents.</div>
+        <div class="hint">Calculated from observed recovery timestamps.</div>
       </div>
 
       <div class="card glass">
         <h3>Open vs Resolved</h3>
-        <p class="value">${s.open} / ${s.resolved}</p>
-        <div class="hint">Open incidents still active; resolved incidents recovered.</div>
+        <p class="value">${s.open_incidents} / ${s.resolved_incidents}</p>
+        <div class="hint">Live operational state.</div>
       </div>
 
       <div class="card glass">
-        <h3>Detection Coverage</h3>
-        <p class="value">CloudWatch</p>
-        <div class="hint">Detection source is documented per incident (demo now, live later).</div>
+        <h3>Detection</h3>
+        <p class="value">EventBridge</p>
+        <div class="hint">ECS Task State Change events.</div>
       </div>
 
       <div class="card glass">
-        <h3>Healing Mechanism</h3>
+        <h3>Healing</h3>
         <p class="value">ECS Scheduler</p>
-        <div class="hint">Service scheduler replaces failed tasks automatically.</div>
+        <div class="hint">Desired count enforcement.</div>
       </div>
     `;
 
     tbody.innerHTML = "";
-    (data.latest || []).forEach(i => {
-      const sev = `<span class="tag ${i.severity === "P1" ? "p1" : "p2"}">${i.severity}</span>`;
-      const st = i.status === "RESOLVED"
-        ? `<span class="tag res">RESOLVED</span>`
-        : `<span class="tag open">OPEN</span>`;
 
+    if (data.latest) {
+      const i = data.latest;
       const row = document.createElement("tr");
       row.innerHTML = `
-        <td><b>${i.id}</b> — ${escapeHtml(i.title)}</td>
-        <td>${sev}</td>
-        <td>${st}</td>
-        <td>${escapeHtml(i.detection)}</td>
-        <td>${escapeHtml(i.healing_action)}</td>
+        <td>${formatTime(i.failure_time)}</td>
+        <td>${escapeHtml(i.component)} / ${escapeHtml(i.cluster || "healops-cluster")}</td>
+        <td style="color:var(--bad);font-weight:700">${escapeHtml(i.failure)}</td>
+        <td>EventBridge (ECS Task State Change)</td>
+        <td style="color:var(--ok);font-weight:700">
+          ECS Scheduler / ${escapeHtml(i.service || "healops-service")}
+        </td>
         <td><b>${i.mttr_human || "—"}</b></td>
       `;
       tbody.appendChild(row);
-    });
+    }
   }
+
+  /* ---------------- INCIDENTS ---------------- */
 
   async function loadIncidents() {
     const tbody = document.querySelector("#incTable tbody");
@@ -89,14 +90,17 @@
     const data = await res.json();
 
     tbody.innerHTML = "";
-    (data.items || []).forEach((i, idx) => {
+
+    (data.items || []).forEach(i => {
       const tr = document.createElement("tr");
       tr.innerHTML = `
-        <td><b>${i.failure_hm}</b></td>
-        <td>${escapeHtml(i.component || "ECS Service")}</td>
-        <td style="color:var(--bad); font-weight:700">${escapeHtml(i.failure || "Task exited")}</td>
-        <td>${escapeHtml(i.detection)}</td>
-        <td style="color:var(--ok); font-weight:700">${escapeHtml(i.healing_action)}</td>
+        <td><b>${formatTime(i.failure_time)}</b></td>
+        <td>${escapeHtml(i.component || "ECS")} / ${escapeHtml(i.cluster || "healops-cluster")}</td>
+        <td style="color:var(--bad);font-weight:700">${escapeHtml(i.failure)}</td>
+        <td>EventBridge (ECS Task State Change)</td>
+        <td style="color:var(--ok);font-weight:700">
+          ${i.healing_action ? "ECS Scheduler / " + escapeHtml(i.service || "healops-service") : "-"}
+        </td>
         <td><b>${i.mttr_human || "—"}</b></td>
       `;
 
@@ -106,32 +110,49 @@
       detailTr.innerHTML = `
         <td colspan="6">
           <div class="detail">
+
             <div class="box">
-              <h4>What broke</h4>
-              <p>${escapeHtml(i.what_broke || "ECS task exited; service briefly dropped below desired count.")}</p>
+              <h4>Failure</h4>
+              <p>${escapeHtml(i.failure_type || "Unknown failure")}</p>
             </div>
+
             <div class="box">
-              <h4>Impact</h4>
-              <p>${escapeHtml(i.impact || "Users could not reach the service until a healthy target returned.")}</p>
+              <h4>Detected By</h4>
+              <p>EventBridge (ECS Task State Change)</p>
             </div>
+
             <div class="box">
-              <h4>Detected by</h4>
-              <p>${escapeHtml(i.detection_detail || "CloudWatch observed service health / task count anomaly.")}</p>
+              <h4>Healing Action</h4>
+              <p>${escapeHtml(i.healing_action || "ECS Scheduler")}</p>
             </div>
-            <div class="box">
-              <h4>How it healed</h4>
-              <p>${escapeHtml(i.healing_detail || "ECS scheduler replaced the failed task; ALB health checks confirmed recovery.")}</p>
-            </div>
+
             <div class="box">
               <h4>Timeline</h4>
               <p>
-                Failure: <b>${i.failure_hm}</b> • Recovery: <b>${i.recovery_hm}</b> • MTTR: <b>${i.mttr_human || "—"}</b>
+                Detected: <b>${formatTime(i.failure_time)}</b><br/>
+                Recovered: <b>${formatTime(i.healed_time)}</b><br/>
+                MTTR: <b>${i.mttr_human || "—"}</b>
               </p>
             </div>
+
+            <!-- ✅ ADDED: DynamoDB proof -->
             <div class="box">
-              <h4>Learning</h4>
-              <p>${escapeHtml(i.learning || "Self-healing is not magic — it’s health checks + scheduler behavior + observable timelines.")}</p>
+              <h4>Storage Record</h4>
+              <p>
+                Source: DynamoDB<br/>
+                PK (service): <b>${escapeHtml(i.service || "healops-service")}</b><br/>
+                SK (detection_time): <b>${escapeHtml(i.failure_time)}</b>
+              </p>
             </div>
+
+            <div class="box">
+              <h4>Metadata</h4>
+              <p>
+                Cluster: ${escapeHtml(i.cluster || "-")}<br/>
+                Exit Code: ${i.exit_code ?? "-"}
+              </p>
+            </div>
+
           </div>
         </td>
       `;
@@ -145,14 +166,24 @@
     });
   }
 
+  /* ---------------- HELPERS ---------------- */
+
   function humanize(secs) {
+    if (secs == null) return "—";
+    secs = Number(secs);
     if (secs < 60) return `${secs}s`;
     const m = Math.floor(secs / 60);
     const s = secs % 60;
-    if (m < 60) return `${m}m ${s}s`;
-    const h = Math.floor(m / 60);
-    const rm = m % 60;
-    return `${h}h ${rm}m`;
+    return `${m}m ${s}s`;
+  }
+
+  function formatTime(t) {
+    if (!t) return "—";
+    try {
+      return new Date(t).toISOString().replace("T", " ").replace("Z", " UTC");
+    } catch {
+      return t;
+    }
   }
 
   function escapeHtml(str) {
