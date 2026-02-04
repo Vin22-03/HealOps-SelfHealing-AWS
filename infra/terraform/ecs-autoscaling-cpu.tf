@@ -15,8 +15,8 @@ resource "aws_appautoscaling_target" "healops_ecs_desired_count" {
 # Target Tracking Scaling Policy (CPU)
 ############################################
 resource "aws_appautoscaling_policy" "healops_cpu_target_tracking" {
-  name               = "healops-cpu-target-tracking"
-  policy_type        = "TargetTrackingScaling"
+  name        = "healops-cpu-target-tracking"
+  policy_type = "TargetTrackingScaling"
 
   resource_id        = aws_appautoscaling_target.healops_ecs_desired_count.resource_id
   scalable_dimension = aws_appautoscaling_target.healops_ecs_desired_count.scalable_dimension
