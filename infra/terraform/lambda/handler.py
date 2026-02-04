@@ -4,7 +4,12 @@ import os
 from datetime import datetime, timezone
 
 dynamodb = boto3.resource("dynamodb")
-table = dynamodb.Table(os.environ["INCIDENTS_TABLE"])
+TABLE_NAME = os.environ.get("INCIDENTS_TABLE", "healops-incidents")
+table = dynamodb.Table(TABLE_NAME)
+
+
+def now_utc():
+    return datetime.now(timezone.utc).isoformat()
 
 
 def lambda_handler(event, context):
@@ -12,90 +17,90 @@ def lambda_handler(event, context):
 
     detail = event.get("detail", {})
     last_status = detail.get("lastStatus")
+    desired_status = detail.get("desiredStatus")
     cluster_arn = detail.get("clusterArn", "")
-    service_arn = detail.get("group", "")
+    group = detail.get("group", "")
+    containers = detail.get("containers", [])
 
-    if not service_arn.startswith("service:"):
-        return {"message": "Not a service task, ignoring"}
+    service_name = group.replace("service:", "") if group else "unknown"
+    cluster_name = cluster_arn.split("/")[-1] if cluster_arn else "unknown"
 
-    service_name = service_arn.replace("service:", "")
-    cluster_name = cluster_arn.split("/")[-1]
-    now = datetime.now(timezone.utc).isoformat()
+    exit_code = None
+    if containers:
+        exit_code = containers[0].get("exitCode")
+
+    detection_time = now_utc()
 
     # -------------------------------
-    # FAILURE: TASK STOPPED
+    # CASE 1: TASK STOPPED → OPEN INCIDENT
     # -------------------------------
     if last_status == "STOPPED":
+        print("Detected TASK_STOPPED for service:", service_name)
+
         item = {
             "service": service_name,
-            "detection_time": now,
+            "detection_time": detection_time,
             "cluster": cluster_name,
             "component": "ECS",
             "desired_status": "STOPPED",
             "detected_by": "EventBridge",
+            "exit_code": exit_code,
             "failure_type": "TASK_STOPPED",
-            "exit_code": detail.get("containers", [{}])[0].get("exitCode"),
             "status": "OPEN",
             "healed_time": None,
-            "mttr_seconds": None,
-            "healing_action": "ECS Scheduler"
+            "mttr_seconds": None
         }
 
         table.put_item(Item=item)
-        print("Incident CREATED:", item)
+        print("Incident OPENED:", item)
 
-        return {"message": "STOPPED incident recorded"}
+        return {"status": "OPEN_RECORDED"}
 
     # -------------------------------
-    # RECOVERY: TASK RUNNING
+    # CASE 2: SERVICE HEALED → RESOLVE INCIDENT
+    # ECS does NOT always emit RUNNING,
+    # so we resolve based on desiredStatus
     # -------------------------------
-    if last_status == "RUNNING":
+    if desired_status == "RUNNING":
+        print("Detected desiredStatus RUNNING → resolving incident")
+
+        # Find latest OPEN incident
         response = table.query(
-            KeyConditionExpression="service = :svc",
-            ExpressionAttributeValues={
-                ":svc": service_name
-            },
-            ScanIndexForward=False,  # latest first
-            Limit=1
+            KeyConditionExpression=boto3.dynamodb.conditions.Key("service").eq(service_name),
+            ScanIndexForward=False
         )
 
-        if not response["Items"]:
-            print("No incident found to resolve")
-            return {"message": "No incident to resolve"}
+        for item in response.get("Items", []):
+            if item.get("status") == "OPEN":
+                healed_time = now_utc()
 
-        incident = response["Items"][0]
+                start = datetime.fromisoformat(item["detection_time"])
+                end = datetime.fromisoformat(healed_time)
+                mttr = int((end - start).total_seconds())
 
-        if incident.get("status") != "OPEN":
-            print("Latest incident already resolved")
-            return {"message": "Incident already resolved"}
+                table.update_item(
+                    Key={
+                        "service": item["service"],
+                        "detection_time": item["detection_time"]
+                    },
+                    UpdateExpression="""
+                        SET
+                            #s = :resolved,
+                            healed_time = :healed,
+                            mttr_seconds = :mttr
+                    """,
+                    ExpressionAttributeNames={
+                        "#s": "status"
+                    },
+                    ExpressionAttributeValues={
+                        ":resolved": "RESOLVED",
+                        ":healed": healed_time,
+                        ":mttr": mttr
+                    }
+                )
 
-        detection_time = datetime.fromisoformat(incident["detection_time"])
-        healed_time = datetime.now(timezone.utc)
-        mttr = int((healed_time - detection_time).total_seconds())
+                print("Incident RESOLVED for service:", service_name)
+                return {"status": "RESOLVED"}
 
-        table.update_item(
-            Key={
-                "service": incident["service"],
-                "detection_time": incident["detection_time"]
-            },
-            UpdateExpression="""
-                SET
-                    healed_time = :healed,
-                    mttr_seconds = :mttr,
-                    #s = :status
-            """,
-            ExpressionAttributeNames={
-                "#s": "status"
-            },
-            ExpressionAttributeValues={
-                ":healed": healed_time.isoformat(),
-                ":mttr": mttr,
-                ":status": "RESOLVED"
-            }
-        )
-
-        print("Incident RESOLVED:", incident["service"], mttr, "seconds")
-
-        return {"message": "Incident resolved"}
-
-    return {"message": "Event ignored"}
+    print("No action taken")
+    return {"status": "IGNORED"}
