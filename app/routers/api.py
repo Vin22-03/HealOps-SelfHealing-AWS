@@ -1,19 +1,20 @@
 from fastapi import APIRouter
 import boto3
 import os
-from datetime import datetime
 
 router = APIRouter(prefix="/api")
 
 # -----------------------------
-# DynamoDB (LAZY INIT – FIXES NoRegionError)
+# DynamoDB (LAZY INIT)
 # -----------------------------
 DYNAMODB_TABLE = os.environ.get("INCIDENTS_TABLE", "healops-incidents")
 
+
 def get_dynamodb_table():
+    # In ECS/Fargate you MUST have region in env OR default config
     region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
     if not region:
-        raise RuntimeError("AWS region not set")
+        raise RuntimeError("AWS region not set (set AWS_REGION in ECS task env)")
 
     dynamodb = boto3.resource("dynamodb", region_name=region)
     return dynamodb.Table(DYNAMODB_TABLE)
@@ -34,9 +35,6 @@ def humanize_seconds(seconds: int | None):
 
 
 def format_incident(item: dict):
-    """
-    Normalize DynamoDB item → UI-ready incident schema
-    """
     return {
         "failure_time": item.get("detection_time"),
         "component": item.get("component", "ECS"),
@@ -47,7 +45,6 @@ def format_incident(item: dict):
         "mttr_human": humanize_seconds(item.get("mttr_seconds")),
         "mttr_seconds": item.get("mttr_seconds"),
         "status": item.get("status", "OPEN"),
-        # details (used in expanded row)
         "healed_time": item.get("healed_time"),
         "cluster": item.get("cluster"),
         "exit_code": item.get("exit_code"),
@@ -56,14 +53,18 @@ def format_incident(item: dict):
 
 
 def fetch_all_incidents():
-    response = table.scan()
-    items = response.get("Items", [])
+    table = get_dynamodb_table()
 
-    # newest first
-    items.sort(
-        key=lambda x: x.get("detection_time", ""),
-        reverse=True
-    )
+    items = []
+    resp = table.scan()
+    items.extend(resp.get("Items", []))
+
+    # handle pagination
+    while "LastEvaluatedKey" in resp:
+        resp = table.scan(ExclusiveStartKey=resp["LastEvaluatedKey"])
+        items.extend(resp.get("Items", []))
+
+    items.sort(key=lambda x: x.get("detection_time", ""), reverse=True)
     return items
 
 
