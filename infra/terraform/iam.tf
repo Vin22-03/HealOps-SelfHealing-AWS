@@ -44,9 +44,39 @@ resource "aws_iam_role" "ecs_task_role" {
     ]
   })
 }
+
+############################################
+# 🔥 ADD: ECS Task Role → DynamoDB READ
+############################################
+
+resource "aws_iam_policy" "ecs_task_dynamodb_read" {
+  name = "healops-ecs-task-dynamodb-read"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "dynamodb:Scan",
+          "dynamodb:Query",
+          "dynamodb:GetItem"
+        ],
+        Resource = aws_dynamodb_table.healops_incidents.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_task_dynamodb_attach" {
+  role       = aws_iam_role.ecs_task_role.name
+  policy_arn = aws_iam_policy.ecs_task_dynamodb_read.arn
+}
+
 ############################################
 # IAM Role for HealOps Incident Lambda
 ############################################
+
 resource "aws_iam_role" "healops_lambda_role" {
   name = "healops-incident-lambda-role"
 
@@ -65,6 +95,7 @@ resource "aws_iam_role" "healops_lambda_role" {
 ############################################
 # IAM Policy: Lambda logging + DynamoDB write
 ############################################
+
 resource "aws_iam_policy" "healops_lambda_policy" {
   name = "healops-incident-lambda-policy"
 
@@ -78,12 +109,15 @@ resource "aws_iam_policy" "healops_lambda_policy" {
           "logs:CreateLogStream",
           "logs:PutLogEvents"
         ],
-        Resource = "*"
+        Resource = "arn:aws:logs:*:*:*"
       },
       {
         Effect = "Allow",
         Action = [
-          "dynamodb:PutItem"
+          "dynamodb:PutItem",
+          "dynamodb:UpdateItem",
+          "dynamodb:GetItem",
+          "dynamodb:Query"
         ],
         Resource = aws_dynamodb_table.healops_incidents.arn
       }
@@ -92,8 +126,9 @@ resource "aws_iam_policy" "healops_lambda_policy" {
 }
 
 ############################################
-# Attach policy to role
+# Attach policy to Lambda role
 ############################################
+
 resource "aws_iam_role_policy_attachment" "healops_lambda_attach" {
   role       = aws_iam_role.healops_lambda_role.name
   policy_arn = aws_iam_policy.healops_lambda_policy.arn
