@@ -9,23 +9,25 @@
     That’s how reliability work is communicated in real teams.
   </p>
 
-  <!-- ✅ ADDED: Data source credibility -->
-  <p class="muted" style="margin-top:6px">
-    ● Data Source: AWS DynamoDB (<code>healops-incidents</code>, <code>us-east-1</code>)
-  </p>
-</section>
+  <!-- ✅ ADDED: DynamoDB truth note -->
+  <div class="glass callout">
+    <b>Credibility Rule:</b> This page mirrors <b>DynamoDB</b>. No mock JSON. No UI assumptions.
+  </div>
 
-<section class="section">
-  <div class="glass table-wrap">
+  <div class="glass" style="margin-top:14px">
     <table class="table" id="incTable">
       <thead>
         <tr>
-          <th>Time (UTC)</th>
-          <th>Component</th>
-          <th>Failure</th>
+          <th>Time</th>
+          <th>Component / Cluster</th>
+          <th>Incident</th>
           <th>Detected By</th>
-          <th>Healing Action</th>
+          <th>Healing</th>
+          <th>Desired</th>
+          <th>Running</th>
+          <th>Scale Δ</th>
           <th>MTTR</th>
+          <th>Status</th>
         </tr>
       </thead>
       <tbody>
@@ -34,23 +36,20 @@
     </table>
   </div>
 
-  <!-- ✅ ADDED: MTTR explanation -->
+  <!-- ✅ MTTR note -->
   <p class="muted" style="margin-top:10px">
-    MTTR is shown only after a recovery signal is observed. Scheduler-driven ECS recoveries may not emit a resolvable event.
+    MTTR is computed only when a recovery signal is observed and stored in DynamoDB (source of truth).
   </p>
 </section>
 
 <section class="section">
   <div class="glass callout">
     <h3 class="h3">How to read this page</h3>
-    <p class="muted">
-      Click any incident row to expand details. This is designed like a lightweight post-incident review:
-      impact → detection → mitigation → learnings.
-    </p>
+    <ul class="list">
+      <li><b>Desired/Running</b> shows task counts <b>before → after</b> healing (only present for autoscaling incidents).</li>
+      <li><b>Scale Δ</b> comes directly from DynamoDB (no UI math).</li>
+      <li>Click any row to expand and see the full DynamoDB-backed evidence.</li>
+    </ul>
   </div>
 </section>
-
-<script>
-  window.HEALOPS_PAGE = "incidents";
-</script>
 {% endblock %}
