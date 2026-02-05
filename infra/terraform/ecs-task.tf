@@ -36,17 +36,6 @@ resource "aws_ecs_task_definition" "healops" {
         }
       ]
 
-      # 🔴 FIX: AWS region for boto3 (THIS SOLVES NoRegionError)
-      environment = [
-        {
-          name  = "AWS_REGION"
-          value = var.aws_region
-        },
-        {
-          name  = "AWS_DEFAULT_REGION"
-          value = var.aws_region
-        }
-      ]
 
       # ✅ Logs
       logConfiguration = {
