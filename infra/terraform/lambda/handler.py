@@ -6,7 +6,6 @@ from datetime import datetime, timezone
 import boto3
 from boto3.dynamodb.conditions import Key
 
-
 # -----------------------------
 # Logging
 # -----------------------------
@@ -14,13 +13,14 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(level=LOG_LEVEL)
 logger = logging.getLogger("healops-incident-ingestor")
 
-
 # -----------------------------
 # DynamoDB setup
 # -----------------------------
 DYNAMODB_TABLE = os.environ.get("INCIDENTS_TABLE", "healops-incidents")
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(DYNAMODB_TABLE)
+
+DEFAULT_SERVICE_NAME = os.getenv("SERVICE_NAME", "healops-service")
 
 
 # -----------------------------
@@ -31,17 +31,9 @@ def utc_now_iso() -> str:
 
 
 def to_iso(ts: str | None) -> str:
-    """
-    EventBridge/CloudWatch often gives ISO already.
-    We normalize to Z format.
-    """
     if not ts:
         return utc_now_iso()
-    # Most AWS event times look like 2026-02-03T13:21:03Z
-    if ts.endswith("Z"):
-        return ts
-    # fallback
-    return ts
+    return ts if ts.endswith("Z") else ts
 
 
 def safe_int(x):
@@ -61,60 +53,46 @@ def seconds_between(start_iso: str, end_iso: str) -> int | None:
 
 
 def put_open_incident(item: dict):
-    """
-    Put an OPEN incident. We allow duplicates by time (SK), but
-    in practice detection_time is unique enough for demo.
-    """
     item.setdefault("status", "OPEN")
     item.setdefault("healed_time", None)
     item.setdefault("mttr_seconds", None)
 
-    logger.info(f"PUT incident OPEN: {json.dumps(item, default=str)}")
+    logger.info("PUT incident OPEN: %s", json.dumps(item, default=str))
     table.put_item(Item=item)
 
 
 def find_latest_open_incident(service: str, incident_type_prefix: str | None = None) -> dict | None:
-    """
-    Query newest -> oldest (ScanIndexForward=False) and return latest OPEN.
-    Optionally filter by incident_type prefix like 'ALARM_' or exact type.
-    """
     resp = table.query(
         KeyConditionExpression=Key("service").eq(service),
         ScanIndexForward=False,
-        Limit=25,  # enough for demo, keeps it fast/cost-friendly
+        Limit=25,
     )
     items = resp.get("Items", [])
 
     for it in items:
         if it.get("status") != "OPEN":
             continue
+
         if incident_type_prefix:
             t = it.get("incident_type", "")
             if incident_type_prefix.endswith("*"):
-                # prefix match
                 prefix = incident_type_prefix[:-1]
                 if not t.startswith(prefix):
                     continue
             else:
-                # exact match
                 if t != incident_type_prefix:
                     continue
+
         return it
 
     return None
 
 
 def resolve_incident(service: str, match_type: str | None, healed_time_iso: str, healing_action: str | None = None):
-    """
-    Resolve the latest matching OPEN incident:
-    - match_type can be:
-      - exact: "TASK_STOPPED"
-      - prefix: "ALARM_*"
-    """
     open_item = find_latest_open_incident(service, match_type)
 
     if not open_item:
-        logger.warning(f"No OPEN incident found to resolve for service={service}, match_type={match_type}")
+        logger.warning("No OPEN incident found to resolve for service=%s match_type=%s", service, match_type)
         return None
 
     detection_time = open_item.get("detection_time")
@@ -122,17 +100,13 @@ def resolve_incident(service: str, match_type: str | None, healed_time_iso: str,
 
     update_expr = "SET #s = :resolved, healed_time = :ht, mttr_seconds = :mttr"
     expr_names = {"#s": "status"}
-    expr_vals = {
-        ":resolved": "RESOLVED",
-        ":ht": healed_time_iso,
-        ":mttr": mttr,
-    }
+    expr_vals = {":resolved": "RESOLVED", ":ht": healed_time_iso, ":mttr": mttr}
 
     if healing_action:
         update_expr += ", healing_action = :ha"
         expr_vals[":ha"] = healing_action
 
-    logger.info(f"RESOLVE incident: service={service}, detection_time={detection_time}, mttr={mttr}")
+    logger.info("RESOLVE incident: service=%s detection_time=%s mttr=%s", service, detection_time, mttr)
 
     table.update_item(
         Key={"service": service, "detection_time": detection_time},
@@ -148,27 +122,24 @@ def resolve_incident(service: str, match_type: str | None, healed_time_iso: str,
 # Parsers: ECS + CloudWatch Alarm
 # -----------------------------
 def handle_ecs_task_state_change(event: dict):
-    """
-    EventBridge detail-type: "ECS Task State Change"
-    We create incident on STOPPED, resolve on RUNNING.
-    """
     detail = event.get("detail", {})
     cluster_arn = detail.get("clusterArn", "")
-    group = detail.get("group", "")  # e.g. "service:healops-service"
-    service = group.split("service:")[-1] if "service:" in group else "unknown-service"
+    group = detail.get("group", "")
+    service = group.split("service:")[-1] if "service:" in group else DEFAULT_SERVICE_NAME
 
     last_status = detail.get("lastStatus")
     desired_status = detail.get("desiredStatus")
     task_arn = detail.get("taskArn")
     stopped_reason = detail.get("stoppedReason")
     containers = detail.get("containers", [])
+
     exit_code = None
     if containers:
         exit_code = containers[0].get("exitCode")
 
     event_time = to_iso(event.get("time"))
 
-    # 1) Create incident on STOPPED
+    # OPEN on STOPPED
     if last_status == "STOPPED" or desired_status == "STOPPED":
         item = {
             "service": service,
@@ -183,12 +154,12 @@ def handle_ecs_task_state_change(event: dict):
             "task_last_status": last_status,
             "task_desired_status": desired_status,
             "exit_code": safe_int(exit_code),
-            "healing_action": "ECS_SCHEDULER_RESTART",  # real-world: ECS service scheduler replaces task
+            "healing_action": "ECS_SCHEDULER_RESTART",
         }
         put_open_incident(item)
         return {"action": "OPEN_CREATED", "service": service, "type": "TASK_STOPPED"}
 
-    # 2) Resolve when task is RUNNING (simple demo correlation: resolve latest TASK_STOPPED OPEN)
+    # RESOLVE on RUNNING
     if last_status == "RUNNING" or desired_status == "RUNNING":
         resolved = resolve_incident(
             service=service,
@@ -201,28 +172,43 @@ def handle_ecs_task_state_change(event: dict):
     return {"action": "IGNORED", "reason": f"Unhandled ECS status last={last_status} desired={desired_status}"}
 
 
+def _extract_service_from_alarm_event(detail: dict) -> str:
+    """
+    Best-effort: try to pull ECS ServiceName from alarm configuration dimensions.
+    Falls back to parsing alarmName, else DEFAULT_SERVICE_NAME.
+    """
+    alarm_name = detail.get("alarmName", "")
+
+    # 1) If you used naming convention: service__cpu-high
+    if "__" in alarm_name:
+        return alarm_name.split("__")[0]
+
+    # 2) Try metric dimensions in alarm config (works for ECS CPUUtilization alarms)
+    cfg = detail.get("configuration", {})
+    metrics = cfg.get("metrics", []) or []
+    for m in metrics:
+        metric_stat = m.get("metricStat", {}).get("metric", {})
+        dims = metric_stat.get("dimensions", {}) or {}
+        # ECS service alarms commonly have ServiceName dimension
+        if "ServiceName" in dims:
+            return dims["ServiceName"]
+
+    # 3) Fallback
+    if "healops-service" in alarm_name:
+        return "healops-service"
+
+    return DEFAULT_SERVICE_NAME
+
+
 def handle_cloudwatch_alarm_state_change(event: dict):
-    """
-    EventBridge detail-type: "CloudWatch Alarm State Change"
-    We create incident on ALARM, resolve on OK.
-    """
     detail = event.get("detail", {})
     alarm_name = detail.get("alarmName", "unknown-alarm")
     state = detail.get("state", {})
-    new_state = state.get("value")  # "ALARM" or "OK"
+    new_state = state.get("value")  # ALARM / OK
     region = event.get("region")
     event_time = to_iso(event.get("time"))
 
-    # You can encode service in alarm name convention:
-    # e.g. healops-service__cpu-high
-    # We'll extract service if possible, else default.
-    service = "unknown-service"
-    if "__" in alarm_name:
-        service = alarm_name.split("__")[0]
-    elif "healops-service" in alarm_name:
-        service = "healops-service"
-
-    # Build incident_type from alarm name for uniqueness
+    service = _extract_service_from_alarm_event(detail)
     incident_type = f"ALARM_{alarm_name}".upper().replace(" ", "_")
 
     if new_state == "ALARM":
@@ -244,8 +230,6 @@ def handle_cloudwatch_alarm_state_change(event: dict):
         return {"action": "OPEN_CREATED", "service": service, "type": incident_type}
 
     if new_state == "OK":
-        # Resolve latest OPEN alarm incident (prefix match)
-        # We resolve by prefix "ALARM_" so any alarm is resolved correctly.
         resolved = resolve_incident(
             service=service,
             match_type="ALARM_*",
@@ -258,21 +242,29 @@ def handle_cloudwatch_alarm_state_change(event: dict):
 
 
 # -----------------------------
-# Lambda entrypoint
+# Lambda entrypoint (IMPORTANT)
 # -----------------------------
+def lambda_handler(event, context):
+    """
+    Terraform handler should be: handler.lambda_handler
+    """
+    try:
+        logger.info("RAW_EVENT: %s", json.dumps(event))
+        detail_type = event.get("detail-type")
+
+        if detail_type == "ECS Task State Change":
+            return handle_ecs_task_state_change(event)
+
+        if detail_type == "CloudWatch Alarm State Change":
+            return handle_cloudwatch_alarm_state_change(event)
+
+        return {"action": "IGNORED", "reason": f"Unsupported detail-type: {detail_type}"}
+
+    except Exception as e:
+        logger.exception("FAILED processing event: %s", str(e))
+        raise
+
+
+# Backward compatibility (optional)
 def handler(event, context):
-    """
-    Unified entrypoint for EventBridge events.
-    """
-    logger.info("RAW_EVENT: %s", json.dumps(event))
-
-    detail_type = event.get("detail-type")
-
-    if detail_type == "ECS Task State Change":
-        return handle_ecs_task_state_change(event)
-
-    if detail_type == "CloudWatch Alarm State Change":
-        return handle_cloudwatch_alarm_state_change(event)
-
-    # If you add more later (ALB target unhealthy etc.), add here without changing UI.
-    return {"action": "IGNORED", "reason": f"Unsupported detail-type: {detail_type}"}
+    return lambda_handler(event, context)
