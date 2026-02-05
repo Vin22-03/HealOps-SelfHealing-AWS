@@ -15,7 +15,6 @@ resource "aws_lambda_function" "healops_incident_lambda" {
   environment {
     variables = {
       INCIDENTS_TABLE = aws_dynamodb_table.healops_incidents.name
-      AWS_REGION      = "us-east-1"
     }
   }
 }
