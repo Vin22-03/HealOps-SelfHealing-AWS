@@ -1,28 +1,46 @@
 from fastapi import APIRouter
 import boto3
 import os
+from decimal import Decimal
 
 router = APIRouter(prefix="/api")
 
 # -----------------------------
-# DynamoDB (LAZY INIT)
+# DynamoDB
 # -----------------------------
 DYNAMODB_TABLE = os.environ.get("INCIDENTS_TABLE", "healops-incidents")
 
 
 def get_dynamodb_table():
-    # In ECS/Fargate you MUST have region in env OR default config
-    region = os.getenv("AWS_REGION") or os.getenv("AWS_DEFAULT_REGION")
-    if not region:
-        raise RuntimeError("AWS region not set (set AWS_REGION in ECS task env)")
-
-    dynamodb = boto3.resource("dynamodb", region_name=region)
+    """
+    IMPORTANT:
+    - Do NOT force AWS_REGION
+    - In ECS, boto3 automatically picks region from task metadata
+    """
+    dynamodb = boto3.resource("dynamodb")
     return dynamodb.Table(DYNAMODB_TABLE)
 
 
 # -----------------------------
 # Helpers
 # -----------------------------
+def decimal_safe(value):
+    if isinstance(value, Decimal):
+        return int(value) if value % 1 == 0 else float(value)
+    return value
+
+
+def json_safe_item(item: dict):
+    """Convert DynamoDB item to JSON-safe dict"""
+    safe = {}
+    for k, v in item.items():
+        if isinstance(v, Decimal):
+            safe[k] = decimal_safe(v)
+        else:
+            safe[k] = v
+    return safe
+
+
 def humanize_seconds(seconds: int | None):
     if seconds is None:
         return "—"
@@ -59,10 +77,12 @@ def fetch_all_incidents():
     resp = table.scan()
     items.extend(resp.get("Items", []))
 
-    # handle pagination
     while "LastEvaluatedKey" in resp:
         resp = table.scan(ExclusiveStartKey=resp["LastEvaluatedKey"])
         items.extend(resp.get("Items", []))
+
+    # make JSON-safe BEFORE formatting
+    items = [json_safe_item(i) for i in items]
 
     items.sort(key=lambda x: x.get("detection_time", ""), reverse=True)
     return items
@@ -96,7 +116,7 @@ def dashboard():
 
 
 # -----------------------------
-# API: Incidents
+# API: Incidents (UI CALLS THIS)
 # -----------------------------
 @router.get("/incidents")
 def incidents():
