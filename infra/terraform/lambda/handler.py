@@ -27,6 +27,7 @@ DEFAULT_SERVICE_NAME = os.getenv("SERVICE_NAME", "healops-service")
 # -----------------------------
 ecs = boto3.client("ecs")
 
+
 # -----------------------------
 # Helpers
 # -----------------------------
@@ -50,30 +51,27 @@ def put_open(item):
     table.put_item(Item=item)
 
 
-def find_open(service, incident_type):
+def find_open(service):
     resp = table.query(
         KeyConditionExpression=Key("service").eq(service),
         ScanIndexForward=False,
-        Limit=10,
+        Limit=20,
     )
     for it in resp.get("Items", []):
-        if it["status"] == "OPEN" and it["incident_type"] == incident_type:
+        if it["status"] == "OPEN":
             return it
     return None
 
 
-def resolve(service, incident_type, healed_time, healing_action):
-    item = find_open(service, incident_type)
+def resolve(service, healed_time, healing_action):
+    item = find_open(service)
     if not item:
-        return
+        return None
 
     mttr = seconds_between(item["detection_time"], healed_time)
 
     table.update_item(
-        Key={
-            "service": service,
-            "detection_time": item["detection_time"]
-        },
+        Key={"service": service, "detection_time": item["detection_time"]},
         UpdateExpression="""
             SET #s=:r,
                 healed_time=:h,
@@ -89,6 +87,8 @@ def resolve(service, incident_type, healed_time, healing_action):
         }
     )
 
+    return {"service": service, "incident_type": item["incident_type"], "mttr": mttr}
+
 
 def ecs_service_healthy(cluster, service):
     resp = ecs.describe_services(cluster=cluster, services=[service])
@@ -97,7 +97,25 @@ def ecs_service_healthy(cluster, service):
 
 
 # =========================================================
-# 1️⃣ ECS TASK STOPPED (OPEN) + SELF HEAL (RESOLVE)
+# INCIDENT TYPE DETECTION
+# =========================================================
+def classify_incident(stopped_reason: str):
+    if not stopped_reason:
+        return "TASK_STOPPED"
+
+    r = stopped_reason.lower()
+
+    if "cannotpull" in r or "cannotstart" in r:
+        return "DEPLOYMENT_FAILURE"
+
+    if "failed elb health checks" in r or "essential container" in r:
+        return "HEALTH_CHECK_FAILURE"
+
+    return "TASK_STOPPED"
+
+
+# =========================================================
+# ECS TASK STOPPED EVENTS → INCIDENT LOGGING
 # =========================================================
 def handle_ecs_task_state_change(event):
     detail = event["detail"]
@@ -105,10 +123,12 @@ def handle_ecs_task_state_change(event):
     if detail["lastStatus"] != "STOPPED":
         return {"ignored": True}
 
+    stopped_reason = detail.get("stoppedReason", "Task stopped")
+    incident_type = classify_incident(stopped_reason)
+
     cluster = detail["clusterArn"].split("/")[-1]
     group = detail.get("group", "")
     service = group.split("service:")[-1] if "service:" in group else DEFAULT_SERVICE_NAME
-
     detection_time = event["time"]
 
     put_open({
@@ -116,56 +136,17 @@ def handle_ecs_task_state_change(event):
         "detection_time": detection_time,
         "cluster": cluster,
         "component": "ECS",
-        "incident_type": "TASK_STOPPED",
-        "failure_reason": detail.get("stoppedReason", "Task stopped"),
+        "incident_type": incident_type,
+        "failure_reason": stopped_reason,
         "detected_by": "EventBridge",
-        "healing_action": "ECS_SCHEDULER_RESTART"
+        "healing_action": "ECS_AUTO_HEALING"
     })
 
-    # ✅ resolve ONLY when ECS is actually healthy
+    # Resolve when service healthy
     if ecs_service_healthy(cluster, service):
-        resolve(
-            service,
-            "TASK_STOPPED",
-            utc_now(),
-            "ECS_SERVICE_RESTORED"
-        )
+        return resolve(service, utc_now(), "ECS_SERVICE_STEADY_STATE")
 
-    return {"task": "handled"}
-
-
-# =========================================================
-# 2️⃣ CPU SPIKE (CloudWatch Alarm) — CORRECT WAY
-# =========================================================
-def handle_cloudwatch_alarm(event):
-    detail = event["detail"]
-    state = detail["state"]["value"]
-    alarm = detail["alarmName"]
-    service = DEFAULT_SERVICE_NAME
-    now = event["time"]
-
-    if state == "ALARM":
-        put_open({
-            "service": service,
-            "detection_time": now,
-            "component": "ECS",
-            "incident_type": "CPU_HIGH",
-            "failure_reason": f"Alarm {alarm} entered ALARM",
-            "detected_by": "CloudWatch",
-            "healing_action": "ECS_AUTOSCALING"
-        })
-        return {"cpu": "open"}
-
-    if state == "OK":
-        resolve(
-            service,
-            "CPU_HIGH",
-            now,
-            "CPU_NORMALIZED"
-        )
-        return {"cpu": "resolved"}
-
-    return {"cpu": "ignored"}
+    return {"task": "OPEN_RECORDED", "incident_type": incident_type}
 
 
 # =========================================================
@@ -178,9 +159,6 @@ def lambda_handler(event, context):
 
     if dtype == "ECS Task State Change":
         return handle_ecs_task_state_change(event)
-
-    if dtype == "CloudWatch Alarm State Change":
-        return handle_cloudwatch_alarm(event)
 
     return {"ignored": dtype}
 
