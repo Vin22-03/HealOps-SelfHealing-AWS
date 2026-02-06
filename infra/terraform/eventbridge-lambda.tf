@@ -17,3 +17,15 @@ resource "aws_cloudwatch_event_target" "ecs_task_stopped_target" {
   target_id = "healops-incident-lambda"
   arn       = aws_lambda_function.healops_incident_lambda.arn
 }
+resource "aws_cloudwatch_event_target" "healops_ecs_service_action_target" {
+  rule      = aws_cloudwatch_event_rule.healops_ecs_service_action.name
+  target_id = "healops-ecs-service-action-to-lambda"
+  arn       = aws_lambda_function.healops_incident_lambda.arn
+}
+resource "aws_lambda_permission" "allow_eventbridge_ecs_service_action" {
+  statement_id  = "AllowEventBridgeInvokeEcsServiceAction"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.healops_incident_lambda.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.healops_ecs_service_action.arn
+}

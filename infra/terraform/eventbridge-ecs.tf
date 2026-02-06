@@ -14,3 +14,12 @@ resource "aws_cloudwatch_event_rule" "ecs_task_stopped" {
     }
   })
 }
+resource "aws_cloudwatch_event_rule" "healops_ecs_service_action" {
+  name        = "healops-ecs-service-action"
+  description = "Capture ECS Service steady state events for HealOps"
+
+  event_pattern = jsonencode({
+    source        = ["aws.ecs"]
+    "detail-type" = ["ECS Service Action"]
+  })
+}
