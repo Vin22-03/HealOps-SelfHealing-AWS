@@ -14,9 +14,9 @@ logging.basicConfig(level=LOG_LEVEL)
 logger = logging.getLogger("healops-incident-ingestor")
 
 # -----------------------------
-# DynamoDB setup
+# DynamoDB
 # -----------------------------
-DYNAMODB_TABLE = os.environ.get("INCIDENTS_TABLE", "healops-incidents")
+DYNAMODB_TABLE = os.getenv("INCIDENTS_TABLE", "healops-incidents")
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(DYNAMODB_TABLE)
 
@@ -30,206 +30,159 @@ ecs = boto3.client("ecs")
 # -----------------------------
 # Helpers
 # -----------------------------
-def utc_now_iso() -> str:
+def utc_now():
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def to_iso(ts: str | None) -> str:
-    if not ts:
-        return utc_now_iso()
-    return ts if ts.endswith("Z") else ts
-
-
-def safe_int(x):
+def seconds_between(start, end):
     try:
-        return int(x)
+        s = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        e = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        return int((e - s).total_seconds())
     except Exception:
         return None
 
 
-def seconds_between(start_iso: str, end_iso: str) -> int | None:
-    try:
-        start = datetime.fromisoformat(start_iso.replace("Z", "+00:00"))
-        end = datetime.fromisoformat(end_iso.replace("Z", "+00:00"))
-        return int((end - start).total_seconds())
-    except Exception:
-        return None
-
-
-def put_open_incident(item: dict):
-    item.setdefault("status", "OPEN")
-    item.setdefault("healed_time", None)
-    item.setdefault("mttr_seconds", None)
-
-    logger.info("PUT incident OPEN: %s", json.dumps(item, default=str))
+def put_open(item):
+    item["status"] = "OPEN"
+    item["healed_time"] = None
+    item["mttr_seconds"] = None
     table.put_item(Item=item)
 
 
-def find_latest_open_incident(service: str, incident_type_prefix: str | None = None) -> dict | None:
+def find_open(service, incident_type):
     resp = table.query(
         KeyConditionExpression=Key("service").eq(service),
         ScanIndexForward=False,
-        Limit=25,
+        Limit=10,
     )
-    items = resp.get("Items", [])
-
-    for it in items:
-        if it.get("status") != "OPEN":
-            continue
-
-        if incident_type_prefix:
-            t = it.get("incident_type", "")
-            if incident_type_prefix.endswith("*"):
-                if not t.startswith(incident_type_prefix[:-1]):
-                    continue
-            else:
-                if t != incident_type_prefix:
-                    continue
-
-        return it
-
+    for it in resp.get("Items", []):
+        if it["status"] == "OPEN" and it["incident_type"] == incident_type:
+            return it
     return None
 
 
-def resolve_incident(
-    service: str,
-    match_type: str | None,
-    healed_time_iso: str,
-    healing_action: str | None = None,
-    extra_updates: dict | None = None,
-):
-    open_item = find_latest_open_incident(service, match_type)
+def resolve(service, incident_type, healed_time, healing_action):
+    item = find_open(service, incident_type)
+    if not item:
+        return
 
-    if not open_item:
-        logger.warning("No OPEN incident found to resolve for service=%s match_type=%s", service, match_type)
-        return None
-
-    detection_time = open_item.get("detection_time")
-    mttr = seconds_between(detection_time, healed_time_iso) if detection_time else None
-
-    update_expr = "SET #s = :resolved, healed_time = :ht, mttr_seconds = :mttr"
-    expr_names = {"#s": "status"}
-    expr_vals = {":resolved": "RESOLVED", ":ht": healed_time_iso, ":mttr": mttr}
-
-    if healing_action:
-        update_expr += ", healing_action = :ha"
-        expr_vals[":ha"] = healing_action
-
-    if extra_updates:
-        for k, v in extra_updates.items():
-            update_expr += f", {k} = :{k}"
-            expr_vals[f":{k}"] = v
+    mttr = seconds_between(item["detection_time"], healed_time)
 
     table.update_item(
-        Key={"service": service, "detection_time": detection_time},
-        UpdateExpression=update_expr,
-        ExpressionAttributeNames=expr_names,
-        ExpressionAttributeValues=expr_vals,
+        Key={
+            "service": service,
+            "detection_time": item["detection_time"]
+        },
+        UpdateExpression="""
+            SET #s=:r,
+                healed_time=:h,
+                mttr_seconds=:m,
+                healing_action=:ha
+        """,
+        ExpressionAttributeNames={"#s": "status"},
+        ExpressionAttributeValues={
+            ":r": "RESOLVED",
+            ":h": healed_time,
+            ":m": mttr,
+            ":ha": healing_action,
+        }
     )
 
-    return {"service": service, "detection_time": detection_time, "mttr_seconds": mttr}
+
+def ecs_service_healthy(cluster, service):
+    resp = ecs.describe_services(cluster=cluster, services=[service])
+    s = resp["services"][0]
+    return s["runningCount"] == s["desiredCount"]
 
 
-# -----------------------------
-# ECS Task events (OPEN only)
-# -----------------------------
-def handle_ecs_task_state_change(event: dict):
-    detail = event.get("detail", {})
-    cluster_arn = detail.get("clusterArn", "")
+# =========================================================
+# 1️⃣ ECS TASK STOPPED (OPEN) + SELF HEAL (RESOLVE)
+# =========================================================
+def handle_ecs_task_state_change(event):
+    detail = event["detail"]
+
+    if detail["lastStatus"] != "STOPPED":
+        return {"ignored": True}
+
+    cluster = detail["clusterArn"].split("/")[-1]
     group = detail.get("group", "")
     service = group.split("service:")[-1] if "service:" in group else DEFAULT_SERVICE_NAME
 
-    last_status = detail.get("lastStatus")
-    desired_status = detail.get("desiredStatus")
-    task_arn = detail.get("taskArn")
-    stopped_reason = detail.get("stoppedReason")
-    containers = detail.get("containers", [])
+    detection_time = event["time"]
 
-    exit_code = containers[0].get("exitCode") if containers else None
-    event_time = to_iso(event.get("time"))
+    put_open({
+        "service": service,
+        "detection_time": detection_time,
+        "cluster": cluster,
+        "component": "ECS",
+        "incident_type": "TASK_STOPPED",
+        "failure_reason": detail.get("stoppedReason", "Task stopped"),
+        "detected_by": "EventBridge",
+        "healing_action": "ECS_SCHEDULER_RESTART"
+    })
 
-    if last_status == "STOPPED" or desired_status == "STOPPED":
-        put_open_incident({
-            "service": service,
-            "detection_time": event_time,
-            "cluster": cluster_arn.split("/")[-1] if cluster_arn else None,
-            "component": "ECS",
-            "incident_type": "TASK_STOPPED",
-            "failure_type": "TASK_STOPPED",
-            "failure_reason": stopped_reason or "ECS task stopped",
-            "detected_by": "EventBridge",
-            "task_arn": task_arn,
-            "task_last_status": last_status,
-            "task_desired_status": desired_status,
-            "exit_code": safe_int(exit_code),
-            "healing_action": "ECS_SCHEDULER_RESTART",
-        })
-        return {"action": "OPEN_CREATED", "service": service}
+    # ✅ resolve ONLY when ECS is actually healthy
+    if ecs_service_healthy(cluster, service):
+        resolve(
+            service,
+            "TASK_STOPPED",
+            utc_now(),
+            "ECS_SERVICE_RESTORED"
+        )
 
-    # IMPORTANT: DO NOT resolve on RUNNING
-    if last_status == "RUNNING" or desired_status == "RUNNING":
-        return {"action": "IGNORED", "reason": "Task RUNNING is not authoritative recovery"}
-
-    return {"action": "IGNORED"}
+    return {"task": "handled"}
 
 
-# -----------------------------
-# ECS Service Action (RESOLVE)
-# -----------------------------
-def handle_ecs_service_action(event: dict):
-    detail = event.get("detail", {})
-    message = (detail.get("message") or "").lower()
-    event_time = to_iso(event.get("time"))
-
-    if "has reached a steady state" not in message:
-        return {"action": "IGNORED", "reason": "Not a steady state event"}
-
+# =========================================================
+# 2️⃣ CPU SPIKE (CloudWatch Alarm) — CORRECT WAY
+# =========================================================
+def handle_cloudwatch_alarm(event):
+    detail = event["detail"]
+    state = detail["state"]["value"]
+    alarm = detail["alarmName"]
     service = DEFAULT_SERVICE_NAME
-    for r in event.get("resources", []):
-        if ":service/" in r:
-            service = r.split("/")[-1]
+    now = event["time"]
 
-    resolved = resolve_incident(
-        service=service,
-        match_type="TASK_STOPPED",
-        healed_time_iso=event_time,
-        healing_action="ECS_SERVICE_STEADY_STATE",
-    )
+    if state == "ALARM":
+        put_open({
+            "service": service,
+            "detection_time": now,
+            "component": "ECS",
+            "incident_type": "CPU_HIGH",
+            "failure_reason": f"Alarm {alarm} entered ALARM",
+            "detected_by": "CloudWatch",
+            "healing_action": "ECS_AUTOSCALING"
+        })
+        return {"cpu": "open"}
 
-    return {"action": "RESOLVED", "service": service, "resolved": resolved}
+    if state == "OK":
+        resolve(
+            service,
+            "CPU_HIGH",
+            now,
+            "CPU_NORMALIZED"
+        )
+        return {"cpu": "resolved"}
+
+    return {"cpu": "ignored"}
 
 
-# -----------------------------
-# CloudWatch Alarm logic (UNCHANGED)
-# -----------------------------
-def handle_cloudwatch_alarm_state_change(event: dict):
-    # untouched – your existing logic
-    from copy import deepcopy
-    return deepcopy(event)  # placeholder to show untouched
-
-
-# -----------------------------
-# Lambda entrypoint
-# -----------------------------
+# =========================================================
+# Lambda entry
+# =========================================================
 def lambda_handler(event, context):
-    try:
-        logger.info("RAW_EVENT: %s", json.dumps(event))
-        detail_type = event.get("detail-type")
+    logger.info(json.dumps(event))
 
-        if detail_type == "ECS Task State Change":
-            return handle_ecs_task_state_change(event)
+    dtype = event.get("detail-type")
 
-        if detail_type == "ECS Service Action":
-            return handle_ecs_service_action(event)
+    if dtype == "ECS Task State Change":
+        return handle_ecs_task_state_change(event)
 
-        if detail_type == "CloudWatch Alarm State Change":
-            return handle_cloudwatch_alarm_state_change(event)
+    if dtype == "CloudWatch Alarm State Change":
+        return handle_cloudwatch_alarm(event)
 
-        return {"action": "IGNORED", "reason": f"Unsupported detail-type: {detail_type}"}
-
-    except Exception as e:
-        logger.exception("FAILED processing event: %s", str(e))
-        raise
+    return {"ignored": dtype}
 
 
 def handler(event, context):
