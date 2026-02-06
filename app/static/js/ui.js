@@ -82,7 +82,7 @@
     }
   }
 
-  /* ---------------- INCIDENTS (FIXED ONLY HERE) ---------------- */
+  /* ---------------- INCIDENTS (CLEAN + TRUSTWORTHY) ---------------- */
 
   async function loadIncidents() {
     const tbody = document.querySelector("#incTable tbody");
@@ -97,16 +97,9 @@
       tr.innerHTML = `
         <td><b>${formatTime(i.failure_time)}</b></td>
         <td>${escapeHtml(i.component)} / ${escapeHtml(i.cluster)}</td>
-        <td style="color:var(--bad);font-weight:700">
-          ${escapeHtml(i.incident_type)}
-        </td>
+        <td style="color:var(--bad);font-weight:700">${escapeHtml(i.incident_type)}</td>
         <td>${escapeHtml(i.detection)}</td>
-        <td style="color:var(--ok);font-weight:700">
-          ${escapeHtml(i.healing_action || "-")}
-        </td>
-        <td>${fmt(i.desired_before)} → ${fmt(i.desired_after)}</td>
-        <td>${fmt(i.running_before)} → ${fmt(i.running_after)}</td>
-        <td>${i.scale_delta ?? "-"}</td>
+        <td style="color:var(--ok);font-weight:700">${escapeHtml(i.healing_action || "-")}</td>
         <td><b>${i.mttr_human || "—"}</b></td>
         <td>${escapeHtml(i.status)}</td>
       `;
@@ -116,22 +109,12 @@
       detailTr.style.display = "none";
 
       detailTr.innerHTML = `
-        <td colspan="10">
+        <td colspan="7">
           <div class="detail">
 
             <div class="box">
-              <h4>Failure Type</h4>
+              <h4>Failure</h4>
               <p>${escapeHtml(i.failure_type)}</p>
-            </div>
-
-            <div class="box">
-              <h4>Detected By</h4>
-              <p>${escapeHtml(i.detection)}</p>
-            </div>
-
-            <div class="box">
-              <h4>Healing Action</h4>
-              <p>${escapeHtml(i.healing_action)}</p>
             </div>
 
             <div class="box">
@@ -143,11 +126,41 @@
               </p>
             </div>
 
+            ${
+              i.desired_before != null || i.running_before != null
+                ? `
             <div class="box">
-              <h4>DynamoDB Evidence</h4>
+              <h4>Autoscaling Evidence</h4>
               <p>
-                PK (service): <b>${escapeHtml(i.service)}</b><br/>
-                SK (detection_time): <b>${escapeHtml(i.failure_time)}</b>
+                Desired: <b>${fmt(i.desired_before)} → ${fmt(i.desired_after)}</b><br/>
+                Running: <b>${fmt(i.running_before)} → ${fmt(i.running_after)}</b><br/>
+                Alarm: ${escapeHtml(i.alarm_name || "-")}
+              </p>
+            </div>
+            `
+                : ""
+            }
+
+            ${
+              i.task_arn
+                ? `
+            <div class="box">
+              <h4>Task Evidence</h4>
+              <p>
+                Task ARN: ${escapeHtml(i.task_arn)}<br/>
+                Exit Code: ${fmt(i.exit_code)}<br/>
+                Last Status: ${escapeHtml(i.task_last_status || "-")}
+              </p>
+            </div>
+            `
+                : ""
+            }
+
+            <div class="box">
+              <h4>DynamoDB Record</h4>
+              <p>
+                Service: <b>${escapeHtml(i.service)}</b><br/>
+                Detection Time (SK): <b>${escapeHtml(i.failure_time)}</b>
               </p>
             </div>
 
