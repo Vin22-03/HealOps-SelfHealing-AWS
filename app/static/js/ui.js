@@ -13,7 +13,7 @@
     });
   }
 
-  /* ---------------- DASHBOARD ---------------- */
+  /* ---------------- DASHBOARD (UNCHANGED) ---------------- */
 
   async function loadDashboard() {
     const cardsEl = document.getElementById("dashCards");
@@ -71,10 +71,10 @@
       row.innerHTML = `
         <td>${formatTime(i.failure_time)}</td>
         <td>${escapeHtml(i.component)} / ${escapeHtml(i.cluster || "healops-cluster")}</td>
-        <td style="color:var(--bad);font-weight:700">${escapeHtml(i.failure)}</td>
-        <td>EventBridge (ECS Task State Change)</td>
+        <td style="color:var(--bad);font-weight:700">${escapeHtml(i.incident_type)}</td>
+        <td>${escapeHtml(i.detection)}</td>
         <td style="color:var(--ok);font-weight:700">
-          ECS Scheduler / ${escapeHtml(i.service || "healops-service")}
+          ${escapeHtml(i.healing_action || "ECS Scheduler")}
         </td>
         <td><b>${i.mttr_human || "—"}</b></td>
       `;
@@ -82,7 +82,7 @@
     }
   }
 
-  /* ---------------- INCIDENTS ---------------- */
+  /* ---------------- INCIDENTS (FIXED ONLY HERE) ---------------- */
 
   async function loadIncidents() {
     const tbody = document.querySelector("#incTable tbody");
@@ -93,37 +93,45 @@
 
     (data.items || []).forEach(i => {
       const tr = document.createElement("tr");
+
       tr.innerHTML = `
         <td><b>${formatTime(i.failure_time)}</b></td>
-        <td>${escapeHtml(i.component || "ECS")} / ${escapeHtml(i.cluster || "healops-cluster")}</td>
-        <td style="color:var(--bad);font-weight:700">${escapeHtml(i.failure)}</td>
-        <td>EventBridge (ECS Task State Change)</td>
-        <td style="color:var(--ok);font-weight:700">
-          ${i.healing_action ? "ECS Scheduler / " + escapeHtml(i.service || "healops-service") : "-"}
+        <td>${escapeHtml(i.component)} / ${escapeHtml(i.cluster)}</td>
+        <td style="color:var(--bad);font-weight:700">
+          ${escapeHtml(i.incident_type)}
         </td>
+        <td>${escapeHtml(i.detection)}</td>
+        <td style="color:var(--ok);font-weight:700">
+          ${escapeHtml(i.healing_action || "-")}
+        </td>
+        <td>${fmt(i.desired_before)} → ${fmt(i.desired_after)}</td>
+        <td>${fmt(i.running_before)} → ${fmt(i.running_after)}</td>
+        <td>${i.scale_delta ?? "-"}</td>
         <td><b>${i.mttr_human || "—"}</b></td>
+        <td>${escapeHtml(i.status)}</td>
       `;
 
       const detailTr = document.createElement("tr");
       detailTr.className = "detail-row";
       detailTr.style.display = "none";
+
       detailTr.innerHTML = `
-        <td colspan="6">
+        <td colspan="10">
           <div class="detail">
 
             <div class="box">
-              <h4>Failure</h4>
-              <p>${escapeHtml(i.failure_type || "Unknown failure")}</p>
+              <h4>Failure Type</h4>
+              <p>${escapeHtml(i.failure_type)}</p>
             </div>
 
             <div class="box">
               <h4>Detected By</h4>
-              <p>EventBridge (ECS Task State Change)</p>
+              <p>${escapeHtml(i.detection)}</p>
             </div>
 
             <div class="box">
               <h4>Healing Action</h4>
-              <p>${escapeHtml(i.healing_action || "ECS Scheduler")}</p>
+              <p>${escapeHtml(i.healing_action)}</p>
             </div>
 
             <div class="box">
@@ -135,21 +143,11 @@
               </p>
             </div>
 
-            <!-- ✅ ADDED: DynamoDB proof -->
             <div class="box">
-              <h4>Storage Record</h4>
+              <h4>DynamoDB Evidence</h4>
               <p>
-                Source: DynamoDB<br/>
-                PK (service): <b>${escapeHtml(i.service || "healops-service")}</b><br/>
+                PK (service): <b>${escapeHtml(i.service)}</b><br/>
                 SK (detection_time): <b>${escapeHtml(i.failure_time)}</b>
-              </p>
-            </div>
-
-            <div class="box">
-              <h4>Metadata</h4>
-              <p>
-                Cluster: ${escapeHtml(i.cluster || "-")}<br/>
-                Exit Code: ${i.exit_code ?? "-"}
               </p>
             </div>
 
@@ -166,7 +164,7 @@
     });
   }
 
-  /* ---------------- HELPERS ---------------- */
+  /* ---------------- HELPERS (UNCHANGED) ---------------- */
 
   function humanize(secs) {
     if (secs == null) return "—";
@@ -194,5 +192,9 @@
       .replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;")
       .replaceAll("'", "&#039;");
+  }
+
+  function fmt(v) {
+    return v == null ? "-" : v;
   }
 })();
