@@ -22,6 +22,11 @@ table = dynamodb.Table(DYNAMODB_TABLE)
 
 DEFAULT_SERVICE_NAME = os.getenv("SERVICE_NAME", "healops-service")
 
+# -----------------------------
+# AWS clients
+# -----------------------------
+ecs = boto3.client("ecs")
+
 
 # -----------------------------
 # Helpers
@@ -88,7 +93,13 @@ def find_latest_open_incident(service: str, incident_type_prefix: str | None = N
     return None
 
 
-def resolve_incident(service: str, match_type: str | None, healed_time_iso: str, healing_action: str | None = None):
+def resolve_incident(
+    service: str,
+    match_type: str | None,
+    healed_time_iso: str,
+    healing_action: str | None = None,
+    extra_updates: dict | None = None,
+):
     open_item = find_latest_open_incident(service, match_type)
 
     if not open_item:
@@ -106,6 +117,13 @@ def resolve_incident(service: str, match_type: str | None, healed_time_iso: str,
         update_expr += ", healing_action = :ha"
         expr_vals[":ha"] = healing_action
 
+    # extra fields (desired/running after, scale_delta, etc.)
+    if extra_updates:
+        for k, v in extra_updates.items():
+            placeholder = f":{k}"
+            update_expr += f", {k} = {placeholder}"
+            expr_vals[placeholder] = v
+
     logger.info("RESOLVE incident: service=%s detection_time=%s mttr=%s", service, detection_time, mttr)
 
     table.update_item(
@@ -116,6 +134,57 @@ def resolve_incident(service: str, match_type: str | None, healed_time_iso: str,
     )
 
     return {"service": service, "detection_time": detection_time, "mttr_seconds": mttr}
+
+
+def get_ecs_service_counts(cluster: str, service: str) -> dict | None:
+    """
+    Reads real ECS service state to prove scaling.
+    """
+    try:
+        resp = ecs.describe_services(cluster=cluster, services=[service])
+        svcs = resp.get("services", [])
+        if not svcs:
+            logger.warning("DescribeServices returned no services for cluster=%s service=%s", cluster, service)
+            return None
+
+        s = svcs[0]
+        return {
+            "desired": s.get("desiredCount"),
+            "running": s.get("runningCount"),
+            "pending": s.get("pendingCount"),
+        }
+    except Exception as e:
+        logger.exception("Failed DescribeServices cluster=%s service=%s err=%s", cluster, service, str(e))
+        return None
+
+
+def parse_targettracking_alarm_name(alarm_name: str) -> tuple[str | None, str | None]:
+    """
+    Expected format:
+      TargetTracking-service/<cluster>/<service>-AlarmHigh-<id>
+      TargetTracking-service/<cluster>/<service>-AlarmLow-<id>
+
+    Returns (cluster, service) if parsable.
+    """
+    try:
+        prefix = "TargetTracking-service/"
+        if not alarm_name.startswith(prefix):
+            return (None, None)
+
+        rest = alarm_name[len(prefix):]  # <cluster>/<service>-AlarmHigh-...
+        parts = rest.split("/", 1)
+        if len(parts) != 2:
+            return (None, None)
+
+        cluster = parts[0]
+        service_plus = parts[1]  # e.g., healops-service-AlarmHigh-xxxx
+        # strip everything from "-Alarm" onwards to get service name
+        idx = service_plus.find("-Alarm")
+        service = service_plus[:idx] if idx != -1 else service_plus
+
+        return (cluster, service)
+    except Exception:
+        return (None, None)
 
 
 # -----------------------------
@@ -173,31 +242,36 @@ def handle_ecs_task_state_change(event: dict):
 
 
 def _extract_service_from_alarm_event(detail: dict) -> str:
-    """
-    Best-effort: try to pull ECS ServiceName from alarm configuration dimensions.
-    Falls back to parsing alarmName, else DEFAULT_SERVICE_NAME.
-    """
     alarm_name = detail.get("alarmName", "")
 
-    # 1) If you used naming convention: service__cpu-high
+    # ✅ TargetTracking alarm name parsing (preferred)
+    cluster, service = parse_targettracking_alarm_name(alarm_name)
+    if service:
+        return service
+
+    # 1) naming convention: service__cpu-high (legacy)
     if "__" in alarm_name:
         return alarm_name.split("__")[0]
 
-    # 2) Try metric dimensions in alarm config (works for ECS CPUUtilization alarms)
+    # 2) metric dimensions in alarm config
     cfg = detail.get("configuration", {})
     metrics = cfg.get("metrics", []) or []
     for m in metrics:
         metric_stat = m.get("metricStat", {}).get("metric", {})
         dims = metric_stat.get("dimensions", {}) or {}
-        # ECS service alarms commonly have ServiceName dimension
         if "ServiceName" in dims:
             return dims["ServiceName"]
 
-    # 3) Fallback
     if "healops-service" in alarm_name:
         return "healops-service"
 
     return DEFAULT_SERVICE_NAME
+
+
+def _extract_cluster_from_alarm_event(detail: dict) -> str | None:
+    alarm_name = detail.get("alarmName", "")
+    cluster, _ = parse_targettracking_alarm_name(alarm_name)
+    return cluster
 
 
 def handle_cloudwatch_alarm_state_change(event: dict):
@@ -209,13 +283,19 @@ def handle_cloudwatch_alarm_state_change(event: dict):
     event_time = to_iso(event.get("time"))
 
     service = _extract_service_from_alarm_event(detail)
+    cluster = _extract_cluster_from_alarm_event(detail)
     incident_type = f"ALARM_{alarm_name}".upper().replace(" ", "_")
+
+    # Capture counts if we can
+    counts = None
+    if cluster and service:
+        counts = get_ecs_service_counts(cluster=cluster, service=service)
 
     if new_state == "ALARM":
         item = {
             "service": service,
             "detection_time": event_time,
-            "cluster": None,
+            "cluster": cluster,
             "component": "CloudWatch",
             "incident_type": incident_type,
             "failure_type": "ALARM",
@@ -224,30 +304,48 @@ def handle_cloudwatch_alarm_state_change(event: dict):
             "alarm_name": alarm_name,
             "alarm_state": "ALARM",
             "region": region,
-            "healing_action": "AUTO_REMEDIATION_PENDING",
+            "healing_action": "ECS_TARGET_TRACKING_AUTOSCALING_PENDING",
         }
+
+        if counts:
+            item["desired_before"] = counts.get("desired")
+            item["running_before"] = counts.get("running")
+            item["pending_before"] = counts.get("pending")
+
         put_open_incident(item)
-        return {"action": "OPEN_CREATED", "service": service, "type": incident_type}
+        return {"action": "OPEN_CREATED", "service": service, "type": incident_type, "counts_before": counts}
 
     if new_state == "OK":
+        extra = {}
+        if counts:
+            extra["desired_after"] = counts.get("desired")
+            extra["running_after"] = counts.get("running")
+            extra["pending_after"] = counts.get("pending")
+
+            # compute scale delta if we can read OPEN item
+            open_item = find_latest_open_incident(service, "ALARM_*")
+            if open_item:
+                db = open_item.get("desired_before")
+                da = counts.get("desired")
+                if isinstance(db, int) and isinstance(da, int):
+                    extra["scale_delta"] = da - db
+
         resolved = resolve_incident(
             service=service,
             match_type="ALARM_*",
             healed_time_iso=event_time,
-            healing_action="AUTO_REMEDIATION_OR_RECOVERY",
+            healing_action="ECS_TARGET_TRACKING_AUTOSCALING",
+            extra_updates=extra if extra else None,
         )
-        return {"action": "RESOLVED", "service": service, "resolved": resolved}
+        return {"action": "RESOLVED", "service": service, "resolved": resolved, "counts_after": counts}
 
     return {"action": "IGNORED", "reason": f"Unhandled alarm state: {new_state}", "alarm": alarm_name}
 
 
 # -----------------------------
-# Lambda entrypoint (IMPORTANT)
+# Lambda entrypoint
 # -----------------------------
 def lambda_handler(event, context):
-    """
-    Terraform handler should be: handler.lambda_handler
-    """
     try:
         logger.info("RAW_EVENT: %s", json.dumps(event))
         detail_type = event.get("detail-type")
@@ -265,6 +363,5 @@ def lambda_handler(event, context):
         raise
 
 
-# Backward compatibility (optional)
 def handler(event, context):
     return lambda_handler(event, context)

@@ -93,7 +93,7 @@ resource "aws_iam_role" "healops_lambda_role" {
 }
 
 ############################################
-# IAM Policy: Lambda logging + DynamoDB write
+# IAM Policy: Lambda logging + DynamoDB write + ECS read
 ############################################
 
 resource "aws_iam_policy" "healops_lambda_policy" {
@@ -120,6 +120,14 @@ resource "aws_iam_policy" "healops_lambda_policy" {
           "dynamodb:Query"
         ],
         Resource = aws_dynamodb_table.healops_incidents.arn
+      },
+      {
+        # 🔹 REQUIRED for autoscaling evidence capture
+        Effect = "Allow",
+        Action = [
+          "ecs:DescribeServices"
+        ],
+        Resource = "*"
       }
     ]
   })

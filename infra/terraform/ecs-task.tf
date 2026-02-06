@@ -8,6 +8,10 @@ resource "aws_ecs_task_definition" "healops" {
   execution_role_arn = aws_iam_role.ecs_execution_role.arn
   task_role_arn      = aws_iam_role.ecs_task_role.arn
 
+lifecycle {
+  ignore_changes = all
+}
+
   container_definitions = jsonencode([
     {
       # ✅ Correct container identity (NO probe confusion)

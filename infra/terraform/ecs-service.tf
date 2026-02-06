@@ -4,6 +4,11 @@ resource "aws_ecs_service" "healops_service" {
   task_definition = aws_ecs_task_definition.healops.arn
   desired_count   = 1
   launch_type     = "FARGATE"
+lifecycle {
+  ignore_changes = [
+    task_definition
+  ]
+}
 
   network_configuration {
     subnets          = [aws_subnet.public_a.id, aws_subnet.public_b.id]
