@@ -5,27 +5,32 @@
 <section class="hero">
   <h1 class="h1">Self-Healing Dashboard</h1>
   <p class="subtitle">
-    Failure-first, recovery-focused. This dashboard visualizes incident timelines, detection signals, healing actions, and MTTR.
-    <span class="muted">Demo data now — live AWS signals later.</span>
+    Failure-first, recovery-focused. This dashboard visualizes real incident timelines,
+    detection signals, healing actions, and measured MTTR based on live AWS events.
+    <span class="muted">
+      Data source: CloudWatch alarms, ECS task state changes, EventBridge, DynamoDB.
+    </span>
   </p>
 </section>
 
 <section class="cards" id="dashCards">
-  <!-- filled by JS -->
+  <!-- populated dynamically from /api/dashboard -->
 </section>
 
 <section class="section">
   <div class="section-head">
     <h2 class="h2">Recent Healing Timeline</h2>
-    <p class="muted">What broke → how it was detected → what healed it → MTTR.</p>
+    <p class="muted">
+      What broke → how it was detected → what healed it → measured MTTR.
+    </p>
   </div>
 
   <div class="glass table-wrap">
     <table class="table" id="latestTable">
       <thead>
         <tr>
-          <th>Incident</th>
-          <th>Severity</th>
+          <th>Incident Time (UTC)</th>
+          <th>Component</th>
           <th>Status</th>
           <th>Detected By</th>
           <th>Healing Action</th>
@@ -33,7 +38,7 @@
         </tr>
       </thead>
       <tbody>
-        <!-- filled by JS -->
+        <!-- populated dynamically from /api/incidents -->
       </tbody>
     </table>
   </div>
@@ -43,15 +48,21 @@
   <div class="glass callout">
     <h3 class="h3">Why HealOps exists</h3>
     <p>
-      Most portfolios show “everything works.” Real SRE work starts when it doesn’t.
-      HealOps is designed to make failures visible, show the recovery mechanism, and quantify MTTR — without unsafe chaos buttons.
+      Most portfolios show systems when everything is healthy.
+      HealOps focuses on what actually matters in production:
+      <b>failure detection</b>, <b>automated recovery</b>, and <b>measurable reliability</b>.
+    </p>
+    <p class="muted">
+      Every incident shown here is derived from real AWS signals — no simulated failures,
+      no manual injections, and no artificial recovery events.
     </p>
     <div class="chips">
-      <span class="chip">Incident lifecycle thinking</span>
-      <span class="chip">ALB health checks</span>
+      <span class="chip">Incident lifecycle</span>
+      <span class="chip">CloudWatch alarms</span>
       <span class="chip">ECS task replacement</span>
+      <span class="chip">EventBridge detection</span>
       <span class="chip">MTTR measurement</span>
-      <span class="chip">Audit-friendly demo</span>
+      <span class="chip">Audit-friendly evidence</span>
     </div>
   </div>
 </section>

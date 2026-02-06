@@ -5,8 +5,9 @@
 <section class="hero">
   <h1 class="h1">About HealOps</h1>
   <p class="subtitle">
-    A recruiter-facing SRE/DevOps showcase built with a <b>failure-first mindset</b>.
-    The goal is not to pretend “magic self-healing” — the goal is to demonstrate how real systems detect failure and recover, and how we quantify MTTR.
+    HealOps is a hands-on SRE & DevOps project built with a <b>failure-first mindset</b>.
+    Instead of assuming systems never fail, it demonstrates how real cloud systems
+    <b>detect failures, trigger recovery, and measure MTTR</b>.
   </p>
 </section>
 
@@ -14,23 +15,35 @@
   <div class="glass panel">
     <h2 class="h2">What this project proves</h2>
     <p>
-      HealOps demonstrates incident lifecycle thinking: you can see <b>what broke</b>, <b>when it broke</b>, <b>how it was detected</b>,
-      <b>what healed it</b>, and <b>how long recovery took</b>. The dashboard is intentionally designed so the data source can evolve:
-      today it reads demo incidents; later it can ingest real AWS signals without rewriting the UI.
+      HealOps shows the complete incident lifecycle using real AWS behavior.
+      For example, when CPU usage spikes or a container becomes unhealthy,
+      <b>CloudWatch alarms</b> and <b>ECS task state change events</b> are emitted.
+      These signals are captured via <b>EventBridge</b> and recorded as incidents.
+    </p>
+    <p>
+      When an ECS task stops or becomes unhealthy, the <b>ECS scheduler</b>
+      automatically replaces the task to maintain the desired count.
+      HealOps observes this recovery and calculates <b>MTTR (Mean Time To Recovery)</b>
+      based on actual timestamps — not assumptions.
     </p>
     <p class="muted">
-      This is audit-friendly and honest by design: no unsafe chaos buttons, no fake “auto-heal” claims — only observed reality.
+      Nothing here is simulated: failures are intentional, detection is event-driven,
+      healing is handled by AWS, and recovery time is measured from real signals.
     </p>
   </div>
 
   <div class="glass panel">
     <h2 class="h2">Architecture</h2>
     <ul class="list">
-      <li><b>AWS ECS (Fargate)</b> — service scheduler for task replacement</li>
-      <li><b>Application Load Balancer</b> — health checks + traffic routing</li>
-      <li><b>Terraform (IaC)</b> — repeatable infra</li>
-      <li><b>Jenkins CI/CD</b> — automation-first provisioning & deployment</li>
-      <li><b>FastAPI UI</b> — dashboard + APIs (demo now, live later)</li>
+      <li><b>AWS ECS (Fargate)</b> — container orchestration and task replacement</li>
+      <li><b>Application Load Balancer</b> — health checks and traffic routing</li>
+      <li><b>CloudWatch</b> — metrics, alarms, and operational signals</li>
+      <li><b>EventBridge</b> — event-driven detection (task stopped, alarms)</li>
+      <li><b>AWS Lambda</b> — incident ingestion and persistence</li>
+      <li><b>DynamoDB</b> — incident timeline and MTTR storage</li>
+      <li><b>Terraform (IaC)</b> — repeatable and auditable infrastructure</li>
+      <li><b>Jenkins CI/CD</b> — automated build and deployment</li>
+      <li><b>FastAPI</b> — dashboard APIs and UI rendering</li>
     </ul>
   </div>
 </section>
@@ -39,32 +52,34 @@
   <div class="glass panel">
     <h2 class="h2">About Me</h2>
     <p>
-      I’m <b>Vin (VinCloudOps)</b>, a Cloud & DevOps engineer focused on reliability, automation, and scalable systems.
-      I like building infrastructure that assumes failure is normal — and recovery must be measurable.
-      My work style is automation-first: IaC over manual clicks, repeatability over hero debugging, and clarity over complexity.
+      I’m <b>Vinay V Bhajantri</b>, a Cloud & DevOps engineer(Entry level) with a strong focus on
+      reliability engineering, automation, and scalable cloud systems.
+      I believe failure is normal in distributed systems — what matters is
+      <b>how quickly and safely systems recover</b>.
     </p>
     <p>
-      HealOps reflects how I think: surface incidents clearly, capture timelines, quantify MTTR, and document learnings like a real SRE team would.
+      HealOps reflects how I approach infrastructure: design for failure,
+      rely on AWS-native recovery mechanisms, automate everything using IaC,
+      and measure outcomes using clear metrics like MTTR.
     </p>
 
     <div class="chips">
       <span class="chip">AWS</span>
       <span class="chip">Terraform</span>
       <span class="chip">ECS Fargate</span>
-      <span class="chip">ALB</span>
+      <span class="chip">EventBridge</span>
+      <span class="chip">CloudWatch</span>
       <span class="chip">CI/CD</span>
       <span class="chip">SRE Mindset</span>
     </div>
-  </div>
-</section>
 
-<section class="section">
-  <div class="glass callout">
-    <h3 class="h3">Next: Live AWS signals (non-negotiable)</h3>
-    <p class="muted">
-      We will replace demo incidents with real AWS signals: ECS task stop events, ALB target health changes, and CloudWatch alarms.
-      The UI is already built to consume <code>/api/*</code> responses — only the backend data source changes.
-    </p>
+    <div style="margin-top: 1rem">
+      <p class="muted">
+        🔗 <a href="https://github.com/Vin22-03" target="_blank">GitHub</a> |
+        <a href="https://www.linkedin.com/in/vinayvbhajantri/" target="_blank">LinkedIn</a> |
+        <a href="https://vincloudops.tech" target="_blank">Portfolio</a>
+      </p>
+    </div>
   </div>
 </section>
 
