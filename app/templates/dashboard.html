@@ -5,10 +5,11 @@
 <section class="hero">
   <h1 class="h1">Self-Healing Dashboard</h1>
   <p class="subtitle">
-    Failure-first, recovery-focused. This dashboard visualizes real incident timelines,
-    detection signals, healing actions, and measured MTTR based on live AWS events.
+    Real AWS failures. Real detection. Real automated healing.
+    This dashboard reflects how your system reacts when something breaks —
+    <b>not when things are normal</b>.
     <span class="muted">
-      Data source: CloudWatch alarms, ECS task state changes, EventBridge, DynamoDB.
+      Data source: ECS Task State Changes (EventBridge), CloudWatch metrics, Lambda ingestion, DynamoDB.
     </span>
   </p>
 </section>
@@ -21,7 +22,8 @@
   <div class="section-head">
     <h2 class="h2">Recent Healing Timeline</h2>
     <p class="muted">
-      What broke → how it was detected → what healed it → measured MTTR.
+      Breakdown of the last detected incident:  
+      <b>failure → detection → healing → MTTR measurement</b>.
     </p>
   </div>
 
@@ -31,7 +33,7 @@
         <tr>
           <th>Incident Time (UTC)</th>
           <th>Component</th>
-          <th>Status</th>
+          <th>Incident Type</th>
           <th>Detected By</th>
           <th>Healing Action</th>
           <th>MTTR</th>
@@ -46,23 +48,33 @@
 
 <section class="section">
   <div class="glass callout">
-    <h3 class="h3">Why HealOps exists</h3>
+    <h3 class="h3">Why HealOps Exists</h3>
     <p>
-      Most portfolios show systems when everything is healthy.
-      HealOps focuses on what actually matters in production:
-      <b>failure detection</b>, <b>automated recovery</b>, and <b>measurable reliability</b>.
+      Traditional portfolio projects only show <i>healthy</i> systems.
+      HealOps shows what truly matters in SRE and production environments —
+      <b>how the system reacts when it fails</b>, and how quickly it heals without human help.
+    </p>
+
+    <p class="muted">
+      Every incident is generated from actual AWS events:
+      no mock failures, no manual fake triggers.  
+      What you see here is exactly what AWS observed.
     </p>
     <p class="muted">
-      Every incident shown here is derived from real AWS signals — no simulated failures,
-      no manual injections, and no artificial recovery events.
-    </p>
+  <b>Note:</b> MTTR appears extremely low (1–2 seconds) because ECS performs instant 
+  self-healing — detection and recovery happen within the same EventBridge → Lambda cycle.
+</p>
+   
+
     <div class="chips">
-      <span class="chip">Incident lifecycle</span>
-      <span class="chip">CloudWatch alarms</span>
-      <span class="chip">ECS task replacement</span>
-      <span class="chip">EventBridge detection</span>
-      <span class="chip">MTTR measurement</span>
-      <span class="chip">Audit-friendly evidence</span>
+      <span class="chip">Failure Classification</span>
+      <span class="chip">Health Check Failures</span>
+      <span class="chip">Container Crashes</span>
+      <span class="chip">EventBridge Detection</span>
+      <span class="chip">Lambda Ingestion</span>
+      <span class="chip">DynamoDB Evidence</span>
+      <span class="chip">Measured MTTR</span>
+      <span class="chip">Full Audit Trail</span>
     </div>
   </div>
 </section>
@@ -71,3 +83,4 @@
   window.HEALOPS_PAGE = "dashboard";
 </script>
 {% endblock %}
+

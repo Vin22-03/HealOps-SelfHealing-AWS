@@ -2,54 +2,36 @@
 {% block title %}HealOps | Incidents{% endblock %}
 
 {% block content %}
-<section class="hero">
-  <h1 class="h1">Incident History</h1>
-  <p class="subtitle">
-    Each incident documents: <b>what broke</b>, <b>how it was detected</b>, <b>what healed it</b>, and <b>what we learned</b>.
-    That’s how reliability work is communicated in real teams.
-  </p>
+<section class="page">
+  <h1 class="title">Incident History</h1>
 
-  <!-- ✅ ADDED: DynamoDB truth note -->
-  <div class="glass callout">
-    <b>Credibility Rule:</b> This page mirrors <b>DynamoDB</b>. No mock JSON. No UI assumptions.
+  <div class="glass card info-card">
+    <h2>What this page shows</h2>
+    <p>
+      Every time your ECS task fails (health check failure, container crash,
+      deployment failure, or any genuine SRE-grade incident), EventBridge captures it,
+      Lambda logs it in DynamoDB, and the UI reflects it here in real time.
+    </p>
+    <p><b>Failure reason</b>, <b>MTTR</b> and <b>healing action</b> are shown clearly for recruiters and SREs.</p>
   </div>
 
-  <div class="glass" style="margin-top:14px">
-    <table class="table" id="incTable">
+  <div class="table-container glass">
+    <table id="incTable">
       <thead>
         <tr>
-          <th>Time</th>
-          <th>Component / Cluster</th>
-          <th>Incident</th>
+          <th>Detected At</th>
+          <th>Component</th>
+          <th>Incident Type</th>
           <th>Detected By</th>
-          <th>Healing</th>
+          <th>Healing Action</th>
           <th>MTTR</th>
           <th>Status</th>
         </tr>
       </thead>
       <tbody>
-        <!-- JS builds rows + expandable details -->
+        <!-- Rows rendered by ui.js -->
       </tbody>
     </table>
   </div>
-
-  <!-- ✅ MTTR note -->
-  <p class="muted" style="margin-top:10px">
-    MTTR is computed only when a recovery signal is observed and stored in DynamoDB (source of truth).
-  </p>
 </section>
-
-<section class="section">
-  <div class="glass callout">
-    <h3 class="h3">How to read this page</h3>
-    <ul class="list">
-      <li><b>Desired/Running</b> shows task counts <b>before → after</b> healing (only present for autoscaling incidents).</li>
-      <li><b>Scale Δ</b> comes directly from DynamoDB (no UI math).</li>
-      <li>Click any row to expand and see the full DynamoDB-backed evidence.</li>
-    </ul>
-  </div>
-</section>
-<script>
-  window.HEALOPS_PAGE = "incidents";
-</script>
 {% endblock %}

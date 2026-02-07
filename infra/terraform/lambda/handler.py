@@ -27,7 +27,6 @@ DEFAULT_SERVICE_NAME = os.getenv("SERVICE_NAME", "healops-service")
 # -----------------------------
 ecs = boto3.client("ecs")
 
-
 # -----------------------------
 # Helpers
 # -----------------------------
@@ -97,6 +96,36 @@ def ecs_service_healthy(cluster, service):
 
 
 # =========================================================
+# FRIENDLY FAILURE REASON (SRE-STYLE)
+# =========================================================
+def friendly_reason(raw: str):
+    if not raw:
+        return "Unknown task failure"
+
+    r = raw.lower()
+
+    if "cannotpull" in r or "pull" in r:
+        return "Deployment failed — container image could not be pulled"
+
+    if "cannotstart" in r:
+        return "Deployment failed — container failed to start"
+
+    if "essential container" in r and "exited" in r:
+        return "Container crashed — essential container exited"
+
+    if "failed elb health checks" in r or "unhealthy" in r:
+        return "ALB health checks failed — container did not become healthy"
+
+    if "outofmemory" in r or "memory" in r:
+        return "Task stopped due to memory exhaustion"
+
+    if "killed" in r:
+        return "Task was force-stopped by ECS"
+
+    return raw  # fallback to AWS reason without breaking behavior
+
+
+# =========================================================
 # INCIDENT TYPE DETECTION
 # =========================================================
 def classify_incident(stopped_reason: str):
@@ -108,7 +137,7 @@ def classify_incident(stopped_reason: str):
     if "cannotpull" in r or "cannotstart" in r:
         return "DEPLOYMENT_FAILURE"
 
-    if "failed elb health checks" in r or "essential container" in r:
+    if "failed elb health checks" in r or "unhealthy" in r or "essential container" in r:
         return "HEALTH_CHECK_FAILURE"
 
     return "TASK_STOPPED"
@@ -123,8 +152,9 @@ def handle_ecs_task_state_change(event):
     if detail["lastStatus"] != "STOPPED":
         return {"ignored": True}
 
-    stopped_reason = detail.get("stoppedReason", "Task stopped")
-    incident_type = classify_incident(stopped_reason)
+    stopped_reason_raw = detail.get("stoppedReason", "Task stopped")
+    incident_type = classify_incident(stopped_reason_raw)
+    failure_reason = friendly_reason(stopped_reason_raw)
 
     cluster = detail["clusterArn"].split("/")[-1]
     group = detail.get("group", "")
@@ -137,7 +167,7 @@ def handle_ecs_task_state_change(event):
         "cluster": cluster,
         "component": "ECS",
         "incident_type": incident_type,
-        "failure_reason": stopped_reason,
+        "failure_reason": failure_reason,  # SRE-friendly
         "detected_by": "EventBridge",
         "healing_action": "ECS_AUTO_HEALING"
     })

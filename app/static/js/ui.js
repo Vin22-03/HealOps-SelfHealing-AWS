@@ -35,31 +35,28 @@
       <div class="card glass">
         <h3>Total Incidents</h3>
         <p class="value">${s.total_incidents}</p>
-        <div class="hint">All failures recorded via EventBridge / CloudWatch.</div>
+        <div class="hint">All failures recorded via EventBridge.</div>
       </div>
 
       <div class="card glass">
         <h3>Average MTTR</h3>
         <p class="value">${avg}</p>
-        <div class="hint">Calculated from observed recovery timestamps.</div>
+        <div class="hint">Measured from real AWS recovery events.</div>
       </div>
 
       <div class="card glass">
         <h3>Open vs Resolved</h3>
         <p class="value">${s.open_incidents} / ${s.resolved_incidents}</p>
-        <div class="hint">Live operational state.</div>
       </div>
 
       <div class="card glass">
         <h3>Detection</h3>
         <p class="value">EventBridge</p>
-        <div class="hint">ECS Task State Change events.</div>
       </div>
 
       <div class="card glass">
         <h3>Healing</h3>
         <p class="value">ECS Scheduler</p>
-        <div class="hint">Desired count enforcement.</div>
       </div>
     `;
 
@@ -68,21 +65,21 @@
     if (data.latest) {
       const i = data.latest;
       const row = document.createElement("tr");
+
       row.innerHTML = `
         <td>${formatTime(i.failure_time)}</td>
         <td>${escapeHtml(i.component)} / ${escapeHtml(i.cluster || "healops-cluster")}</td>
         <td style="color:var(--bad);font-weight:700">${escapeHtml(i.incident_type)}</td>
         <td>${escapeHtml(i.detection)}</td>
-        <td style="color:var(--ok);font-weight:700">
-          ${escapeHtml(i.healing_action || "ECS Scheduler")}
-        </td>
+        <td style="color:var(--ok);font-weight:700">${escapeHtml(i.healing_action || "ECS Scheduler")}</td>
         <td><b>${i.mttr_human || "—"}</b></td>
       `;
+
       tbody.appendChild(row);
     }
   }
 
-  /* ---------------- INCIDENTS (CLEAN + TRUSTWORTHY) ---------------- */
+  /* ---------------- INCIDENTS (CLEANED + FAILURE REASON VISIBLE) ---------------- */
 
   async function loadIncidents() {
     const tbody = document.querySelector("#incTable tbody");
@@ -104,6 +101,7 @@
         <td>${escapeHtml(i.status)}</td>
       `;
 
+      // DETAILS ROW (NO AUTOSCALING ANYMORE)
       const detailTr = document.createElement("tr");
       detailTr.className = "detail-row";
       detailTr.style.display = "none";
@@ -113,8 +111,8 @@
           <div class="detail">
 
             <div class="box">
-              <h4>Failure</h4>
-              <p>${escapeHtml(i.failure_type)}</p>
+              <h4>Failure Reason</h4>
+              <p>${escapeHtml(i.failure_reason || "—")}</p>
             </div>
 
             <div class="box">
@@ -127,21 +125,6 @@
             </div>
 
             ${
-              i.desired_before != null || i.running_before != null
-                ? `
-            <div class="box">
-              <h4>Autoscaling Evidence</h4>
-              <p>
-                Desired: <b>${fmt(i.desired_before)} → ${fmt(i.desired_after)}</b><br/>
-                Running: <b>${fmt(i.running_before)} → ${fmt(i.running_after)}</b><br/>
-                Alarm: ${escapeHtml(i.alarm_name || "-")}
-              </p>
-            </div>
-            `
-                : ""
-            }
-
-            ${
               i.task_arn
                 ? `
             <div class="box">
@@ -151,8 +134,7 @@
                 Exit Code: ${fmt(i.exit_code)}<br/>
                 Last Status: ${escapeHtml(i.task_last_status || "-")}
               </p>
-            </div>
-            `
+            </div>`
                 : ""
             }
 
@@ -168,6 +150,7 @@
         </td>
       `;
 
+      // CLICK TO EXPAND
       tr.addEventListener("click", () => {
         detailTr.style.display = detailTr.style.display === "none" ? "" : "none";
       });
@@ -177,7 +160,7 @@
     });
   }
 
-  /* ---------------- HELPERS (UNCHANGED) ---------------- */
+  /* ---------------- HELPERS ---------------- */
 
   function humanize(secs) {
     if (secs == null) return "—";
