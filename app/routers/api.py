@@ -1,3 +1,4 @@
+
 from fastapi import APIRouter
 import boto3
 import os
@@ -55,7 +56,7 @@ def format_incident(item: dict):
         "service": item.get("service"),
         "incident_type": item.get("incident_type") or item.get("failure_type"),
         "failure_type": item.get("failure_type"),
-
+        "failure_reason": item.get("failure_reason"),  #  FIX ADDED 
         # timing
         "failure_time": item.get("detection_time"),
         "healed_time": item.get("healed_time"),
