@@ -5,45 +5,45 @@
 <section class="hero">
   <h1 class="h1">About HealOps</h1>
   <p class="subtitle">
-    HealOps is a hands-on SRE & DevOps project built with a <b>failure-first mindset</b>.
-    Instead of assuming systems never fail, it demonstrates how real cloud systems
-    <b>detect failures, trigger recovery, and measure MTTR</b>.
+    HealOps is a cloud-native reliability project that demonstrates how modern AWS systems
+    detect failures, recover automatically, and maintain application continuity without
+    manual intervention. The goal is simple — show cloud resilience in action.
   </p>
 </section>
 
 <section class="section split">
   <div class="glass panel">
-    <h2 class="h2">What this project proves</h2>
+    <h2 class="h2">What this project demonstrates</h2>
     <p>
-      HealOps shows the complete incident lifecycle using real AWS behavior.
-      For example, when CPU usage spikes or a container becomes unhealthy,
-      <b>CloudWatch alarms</b> and <b>ECS task state change events</b> are emitted.
-      These signals are captured via <b>EventBridge</b> and recorded as incidents.
+      HealOps captures the real behavior of AWS-managed infrastructure. Whenever a
+      container stops, becomes unhealthy, or fails during deployment, AWS emits events
+      describing what happened. These events are recorded, analyzed, and displayed in a
+      clear incident timeline.
     </p>
     <p>
-      When an ECS task stops or becomes unhealthy, the <b>ECS scheduler</b>
-      automatically replaces the task to maintain the desired count.
-      HealOps observes this recovery and calculates <b>MTTR (Mean Time To Recovery)</b>
-      based on actual timestamps — not assumptions.
+      When a failure occurs, the ECS service automatically launches a replacement task to
+      maintain availability. HealOps observes this recovery and measures the time it took
+      from detection to restoration — giving a transparent view of system behavior during
+      disruptions.
     </p>
     <p class="muted">
-      Nothing here is simulated: failures are intentional, detection is event-driven,
-      healing is handled by AWS, and recovery time is measured from real signals.
+      Nothing is artificially generated. Failures are real, detection is event-driven,
+      recovery is performed by AWS, and metrics like MTTR are calculated from real-world
+      timestamps.
     </p>
   </div>
 
   <div class="glass panel">
-    <h2 class="h2">Architecture</h2>
+    <h2 class="h2">Architecture Overview</h2>
     <ul class="list">
-      <li><b>AWS ECS (Fargate)</b> — container orchestration and task replacement</li>
-      <li><b>Application Load Balancer</b> — health checks and traffic routing</li>
-      <li><b>CloudWatch</b> — metrics, alarms, and operational signals</li>
-      <li><b>EventBridge</b> — event-driven detection (task stopped, alarms)</li>
-      <li><b>AWS Lambda</b> — incident ingestion and persistence</li>
-      <li><b>DynamoDB</b> — incident timeline and MTTR storage</li>
-      <li><b>Terraform (IaC)</b> — repeatable and auditable infrastructure</li>
-      <li><b>Jenkins CI/CD</b> — automated build and deployment</li>
-      <li><b>FastAPI</b> — dashboard APIs and UI rendering</li>
+      <li><b>AWS ECS (Fargate)</b> — runs the containerized application</li>
+      <li><b>Application Load Balancer</b> — health checks & traffic routing</li>
+      <li><b>EventBridge</b> — listens for AWS failure events</li>
+      <li><b>AWS Lambda</b> — ingests incidents and stores recovery details</li>
+      <li><b>DynamoDB</b> — persistent incident timeline & MTTR history</li>
+      <li><b>Terraform</b> — complete infrastructure provisioning</li>
+      <li><b>Jenkins</b> — CI/CD pipeline for deployment automation</li>
+      <li><b>FastAPI</b> — backend API and dashboard rendering</li>
     </ul>
   </div>
 </section>
@@ -52,15 +52,15 @@
   <div class="glass panel">
     <h2 class="h2">About Me</h2>
     <p>
-      I’m <b>Vinay V Bhajantri</b>, a Cloud & DevOps engineer(Entry level) with a strong focus on
-      reliability engineering, automation, and scalable cloud systems.
-      I believe failure is normal in distributed systems — what matters is
-      <b>how quickly and safely systems recover</b>.
+      I’m <b>Vinay V Bhajantri</b>, a Cloud & DevOps engineer passionate about automation,
+      infrastructure reliability, and building systems that behave predictably under
+      failure. I enjoy working with AWS services, container platforms, and Infrastructure as
+      Code to create environments that are robust, observable, and easy to operate.
     </p>
     <p>
-      HealOps reflects how I approach infrastructure: design for failure,
-      rely on AWS-native recovery mechanisms, automate everything using IaC,
-      and measure outcomes using clear metrics like MTTR.
+      HealOps represents my learning journey and my interest in understanding how cloud
+      systems react during failure scenarios. It highlights how observability, automation,
+      and managed services can work together to create dependable infrastructure.
     </p>
 
     <div class="chips">
@@ -70,16 +70,16 @@
       <span class="chip">EventBridge</span>
       <span class="chip">CloudWatch</span>
       <span class="chip">CI/CD</span>
-      <span class="chip">SRE Mindset</span>
+      <span class="chip">Cloud Architecture</span>
     </div>
-<div style="margin-top: 1rem">
-  <p class="muted">
-    🔗 GitHub: <b>github.com/Vin22-03</b> |
-    LinkedIn: <b>linkedin.com/in/vinayvbhajantri</b> |
-    Portfolio: <b>vincloudops.tech</b>
-  </p>
-</div>
 
+    <div style="margin-top: 1rem">
+      <p class="muted">
+        🔗 GitHub: <b>github.com/Vin22-03</b> |
+        LinkedIn: <b>linkedin.com/in/vinayvbhajantri</b> |
+        Portfolio: <b>vincloudops.tech</b>
+      </p>
+    </div>
   </div>
 </section>
 
