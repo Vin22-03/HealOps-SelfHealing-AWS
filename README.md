@@ -142,6 +142,103 @@ Every incident includes:
 - Healing action  
 
 ---
+# ⚙️ CI/CD Deployment Flow
 
-# 📦 Folder Structure
+1. Code pushed to GitHub  
+2. Jenkins triggers pipeline  
+3. Builds Docker image  
+4. Pushes image to Amazon ECR  
+5. Updates ECS service with new task revision  
+6. ALB validates new task health  
+7. HealOps dashboard displays real-time incidents  
+
+---
+
+# 🧪 Failure Injection (Real AWS Behavior)
+
+HealOps provides safe URLs to intentionally break the app:
+
+| Endpoint | Behavior |
+|----------|----------|
+| `/inject/crash` | Crashes the container instantly |
+| `/inject/unhealthy` | ALB marks task unhealthy |
+| `/inject/hang` | Simulates freeze |
+
+Each one produces a **real AWS incident** logged into DynamoDB.
+
+---
+
+# 🚦 MTTR (Mean Time To Recovery)
+
+MTTR = healed_time − detection_time  
+
+Typical values observed:
+
+| Incident | MTTR |
+|----------|------|
+| Health Check Failure | 1–2 seconds |
+| Crash / Stop | 1 second |
+| Deployment Issues | 1–3 seconds |
+
+ECS is highly optimized for quick auto-healing, which HealOps visualizes clearly.
+
+---
+
+# 🧾 API Endpoints
+
+### **GET `/api/dashboard`**
+Returns:
+- total_incidents  
+- MTTR  
+- latest incident  
+- open/resolved counts  
+
+### **GET `/api/incidents`**
+Returns full structured incident history.
+
+### **GET `/health`**
+Used by ALB to determine task health.
+
+### **GET `/inject/*`**
+Controlled failure simulation.
+
+---
+
+# 🚀 Running Locally
+
+
+---
+
+# 🪄 Key Cloud & DevOps Skills Demonstrated
+
+- AWS ECS Fargate  
+- ALB health management  
+- EventBridge event-driven architecture  
+- AWS Lambda event ingestion  
+- DynamoDB NoSQL modelling  
+- CI/CD with Jenkins  
+- Terraform IaC  
+- FastAPI API design  
+- MTTR measurement from real AWS signals  
+- Observability & cloud reliability mindset  
+
+---
+
+# 👤 Author
+
+**Vinay V Bhajantri**  
+Cloud & DevOps Engineer  
+- GitHub: https://github.com/Vin22-03  
+- Portfolio: https://vincloudops.tech  
+- LinkedIn: https://linkedin.com/in/vinayvbhajantri  
+
+---
+
+# 🌟 Final Note
+
+HealOps reflects the real operational behaviour of AWS-managed systems.  
+Failures are real. Detection is real. Recovery is real.  
+Nothing is mocked or simulated.
+
+
 
