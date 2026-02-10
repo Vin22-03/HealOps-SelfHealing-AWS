@@ -10,7 +10,7 @@ No simulated timestamps.
 
 ---
 
-## 🧠 What HealOps Demonstrates
+## What HealOps Demonstrates
 
 ### ✔️ Real ECS task failures captured automatically  
 If a task stops, crashes, fails health checks, or fails deployment, AWS emits an event — HealOps records it.
@@ -120,12 +120,25 @@ Build → ECR push → ECS deploy pipeline.
 
 ---
 
-# 📊 Dashboard Screenshots (placeholders)
+#  Project Screenshots
+
+| # | Screenshot | Description |
+|---|------------|-------------|
+| **1** | ![](ScreenShots/HealOps%20Dashboard.png) | **Main Dashboard** showing MTTR, detection summary, latest incident |
+| **2** | ![](ScreenShots/HealOps%20Incidents.png) | **Complete Incident Timeline** with healing details & statuses |
+| **3** | ![](ScreenShots/Failure%20reason.png) | **Failure Reason Details** extracted from real AWS events |
+| **4** | ![](ScreenShots/Healthcheck_failure.png) | **ALB Health Check Failure Evidence** showing unhealthy container |
+| **5** | ![](ScreenShots/CPU%20alarm.png) | **CloudWatch CPU Alarm Trigger** used for automatic detection |
+| **6** | ![](ScreenShots/DynamoDB_Table.png) | **DynamoDB Incident Store** containing MTTR and lifecycle metadata |
+| **7** | ![](ScreenShots/ECS_Cluster.png) | **ECS Cluster Overview** where the HealOps service runs |
+| **8** | ![](ScreenShots/ECS_Tasks.png) | **ECS Tasks View** showing failures & service-driven task replacement |
+| **9** | ![](ScreenShots/EventBridge%20Rules.png) | **EventBridge Rules** capturing ECS task failures & CloudWatch alarms |
+| **10** | ![](ScreenShots/HealOps%20About.png) | **About Page** explaining architecture & design details |
 
 
 ---
 
-# 🛠 Incident Behavior Supported
+#  Incident Behavior Supported
 
 | Failure Type | Cause | Detection | Healing |
 |--------------|-------|-----------|---------|
@@ -142,7 +155,7 @@ Every incident includes:
 - Healing action  
 
 ---
-# ⚙️ CI/CD Deployment Flow
+#  CI/CD Deployment Flow
 
 1. Code pushed to GitHub  
 2. Jenkins triggers pipeline  
@@ -154,7 +167,7 @@ Every incident includes:
 
 ---
 
-# 🧪 Failure Injection (Real AWS Behavior)
+#  Failure Injection (Real AWS Behavior)
 
 HealOps provides safe URLs to intentionally break the app:
 
@@ -168,7 +181,7 @@ Each one produces a **real AWS incident** logged into DynamoDB.
 
 ---
 
-# 🚦 MTTR (Mean Time To Recovery)
+#  MTTR (Mean Time To Recovery)
 
 MTTR = healed_time − detection_time  
 
@@ -184,7 +197,7 @@ ECS is highly optimized for quick auto-healing, which HealOps visualizes clearly
 
 ---
 
-# 🧾 API Endpoints
+#  API Endpoints
 
 ### **GET `/api/dashboard`**
 Returns:
@@ -204,12 +217,7 @@ Controlled failure simulation.
 
 ---
 
-# 🚀 Running Locally
-
-
----
-
-# 🪄 Key Cloud & DevOps Skills Demonstrated
+#  Key Cloud & DevOps Skills Demonstrated
 
 - AWS ECS Fargate  
 - ALB health management  
@@ -224,8 +232,6 @@ Controlled failure simulation.
 
 ---
 
-# 👤 Author
-
 **Vinay V Bhajantri**  
 Cloud & DevOps Engineer  
 - GitHub: https://github.com/Vin22-03  
@@ -234,7 +240,7 @@ Cloud & DevOps Engineer
 
 ---
 
-# 🌟 Final Note
+#  Final Note
 
 HealOps reflects the real operational behaviour of AWS-managed systems.  
 Failures are real. Detection is real. Recovery is real.  
